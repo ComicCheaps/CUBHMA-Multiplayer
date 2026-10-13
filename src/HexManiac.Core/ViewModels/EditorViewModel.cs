@@ -1,4 +1,4 @@
-﻿using HavenSoft.HexManiac.Core.Models;
+using HavenSoft.HexManiac.Core.Models;
 using HavenSoft.HexManiac.Core.Models.Runs;
 using HavenSoft.HexManiac.Core.Models.Runs.Sprites;
 using HavenSoft.HexManiac.Core.ViewModels.DataFormats;
@@ -132,6 +132,9 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
 
       public MapTutorialsViewModel MapTutorials { get; } = new();
 
+      /// <summary>Plays the animated buttons of the Goto dialog while it is shown (and the window is the active one). The window tells it when it is deactivated.</summary>
+      public ShortcutAnimationClock ShortcutClock { get; }
+
       private GotoControlViewModel gotoViewModel = new GotoControlViewModel(null, null, null, false);
       public GotoControlViewModel GotoViewModel {
          get => gotoViewModel;
@@ -229,7 +232,8 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
       }
 
       public void RunQuickEdit(IQuickEditItem edit) {
-         var tab = tabs[SelectedIndex];
+         var tab = SelectedIndex.InRange(0, tabs.Count) ? tabs[SelectedIndex] : null;
+         if (tab == null && edit is not IStandaloneQuickEdit) return; // only standalone utilities can run without an open tab
          if (tab is MapEditorViewModel map) { TabChangeRequested(map, new(map.ViewPort)); tab = map.ViewPort; }
          var viewPort = tab as IViewPort;
          gotoViewModel.ControlVisible = false;
@@ -237,7 +241,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          errorTask.ContinueWith(ContinueQuickEdit, TaskContinuationOptions.ExecuteSynchronously);
       }
       private void ContinueQuickEdit(Task<ErrorInfo> completedTask) {
-         var viewPort = tabs[SelectedIndex] as IViewPort;
+         var viewPort = SelectedIndex.InRange(0, tabs.Count) ? tabs[SelectedIndex] as IViewPort : null;
          if (viewPort is IEditableViewPort editableViewPort) editableViewPort.ClearProgress();
          var error = completedTask.Result;
          if (!error.HasError) return;
@@ -389,6 +393,52 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
       private bool animateScroll = true;
       public bool AnimateScroll { get => animateScroll; set => Set(ref animateScroll, value); }
 
+      #region Graphics (View > Graphics)
+
+      // Both settings are read when the program starts (the WPF layer reads them before the first window exists), so changing one only has an effect the next time CUBHMA starts.
+      // GraphicsSettings decides what each one means. The WPF layer listens to PropertyChanged to write the Windows graphics card choice as soon as the menu item is clicked.
+
+      private bool useDedicatedGraphics = true;
+      /// <summary>Ask Windows to run this program on the dedicated (high performance) graphics card instead of the one built into the processor. On by default. Needs a restart.</summary>
+      public bool UseDedicatedGraphics {
+         get => useDedicatedGraphics;
+         set => Set(ref useDedicatedGraphics, value, old => ShowStatus(GraphicsSettings.RestartNoteForGraphicsCard));
+      }
+
+      private bool useHardwareAcceleration = true;
+      /// <summary>Let the graphics card draw the program's windows. Turn it off if the graphics driver causes problems: the processor draws everything then. On by default. Needs a restart.</summary>
+      public bool UseHardwareAcceleration {
+         get => useHardwareAcceleration;
+         set => Set(ref useHardwareAcceleration, value, old => ShowStatus(GraphicsSettings.RestartNoteForRendering));
+      }
+
+      private string graphicsStatus = string.Empty;
+      /// <summary>One line that says how the program is drawing right now (graphics card or processor). The WPF layer fills it in at startup.</summary>
+      public string GraphicsStatus { get => graphicsStatus; set => Set(ref graphicsStatus, value ?? string.Empty); }
+
+      #endregion
+
+      /// <summary>The View menu's choices for the opacity of the movement-permission grid in the map editor, in percent.</summary>
+      public static IReadOnlyList<int> CollisionGridOpacityChoices { get; } = new[] { 10, 25, BlockMapViewModel.DefaultCollisionGridOpacity, 50, 75, 100 };
+
+      /// <summary>
+      /// 0 to 100: how strongly the movement-permission grid is drawn in the map editor.
+      /// There is only one value: the slider in the map editor changes the same one (MapEditorViewModel.CollisionGridOpacity).
+      /// It is saved with the other application settings.
+      /// </summary>
+      public int CollisionGridOpacity {
+         get => BlockMapViewModel.CollisionGridOpacity;
+         set {
+            value = value.LimitToRange(0, 100);
+            if (value == BlockMapViewModel.CollisionGridOpacity) return;
+            BlockMapViewModel.CollisionGridOpacity = value;
+            NotifyPropertyChanged();
+            foreach (var tab in this) {
+               if (tab is MapEditorViewModel mapTab) mapTab.RefreshCollisionGrid();
+            }
+         }
+      }
+
       private bool autoAdjustDataWidth = true;
       public bool AutoAdjustDataWidth { get => autoAdjustDataWidth; set => Set(ref autoAdjustDataWidth, value); }
 
@@ -469,7 +519,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
                   findNext.RaiseCanExecuteChanged();
                   runFile.RaiseCanExecuteChanged();
                   duplicateCurrentTab.RaiseCanExecuteChanged();
-                  if (selectedIndex >= 0 && selectedIndex < tabs.Count) tabs[selectedIndex].Refresh();
+                  if (selectedIndex >= 0 && selectedIndex < tabs.Count) TabSwitch.Refresh(tabs[selectedIndex]);
                   UpdateGotoViewModel();
                   foreach (var edit in QuickEditsPokedex.Concat(QuickEditsExpansion).Concat(QuickEditsMisc)) edit.TabChanged();
                   NotifyPropertyChanged(nameof(SelectedTab));
@@ -502,6 +552,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          Singletons = new Singletons(workDispatcher, copyLimit);
 
          this.workDispatcher = workDispatcher ?? InstantDispatch.Instance;
+         ShortcutClock = new ShortcutAnimationClock(this.workDispatcher);
          this.allowLoadingMetadata = allowLoadingMetadata;
          QuickEditsPokedex = utilities ?? new List<IQuickEditItem> {
             new UpdateDexConversionTable(),
@@ -526,6 +577,13 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
             new RomOverview(),
             new DecapNames(),
             new ApplyCFRUPatch { Editor = this },
+            new ApplyCubePatch(this),
+            new OpenSpriteGallery(),
+            new OpenSoundEditor(),
+            new OpenAnimatedTiles(),
+            new OpenCharacterCustomization(),
+            new OpenIntroManager(),
+            new OpenReflectionPalettes(),
          };
 
          tabs = new List<ITabContent>();
@@ -585,6 +643,10 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          ShowMatrix = !metadata.Contains("ShowMatrixGrid = False");
          FocusOnGotoShortcuts = !metadata.Contains("FocusOnGotoShortcuts = False");
          AnimateScroll = !metadata.Contains("AnimateScroll = False");
+         useDedicatedGraphics = GraphicsSettings.IsEnabled(metadata, GraphicsSettings.UseDedicatedGraphicsSetting); // the fields, not the properties: loading a setting says nothing to the user
+         useHardwareAcceleration = GraphicsSettings.IsEnabled(metadata, GraphicsSettings.UseHardwareAccelerationSetting);
+         var collisionGridLine = metadata.FirstOrDefault(line => line.StartsWith("CollisionGridOpacity = "));
+         if (collisionGridLine != null && int.TryParse(collisionGridLine.Split('=').Last().Trim(), out var collisionGridOpacity)) BlockMapViewModel.CollisionGridOpacity = collisionGridOpacity;
          AutoAdjustDataWidth = !metadata.Contains("AutoAdjustDataWidth = False");
          StretchData = !metadata.Contains("StretchData = False");
          IsNewVersionAvailable = metadata.Contains("IsNewVersionAvailable = True");
@@ -630,6 +692,9 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
             $"MaximumSearchResults = {MaximumSearchResults}",
             $"CopyLimit = {Singletons.CopyLimit}",
             $"AnimateScroll = {AnimateScroll}",
+            GraphicsSettings.SettingLine(GraphicsSettings.UseDedicatedGraphicsSetting, UseDedicatedGraphics),
+            GraphicsSettings.SettingLine(GraphicsSettings.UseHardwareAccelerationSetting, UseHardwareAcceleration),
+            $"CollisionGridOpacity = {CollisionGridOpacity}",
             $"AutoAdjustDataWidth = {AutoAdjustDataWidth}",
             $"StretchData = {StretchData}",
             $"AllowMultipleElementsPerLine = {AllowMultipleElementsPerLine}",
@@ -754,6 +819,65 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
 
       public void CopyMessage() => fileSystem.CopyText = InformationMessage;
 
+      /// <summary>Lets a long-running utility tell the user what it is doing (shown like any other information message).</summary>
+      public void ShowStatus(string message) => InformationMessage = message;
+
+      /// <summary>
+      /// Swaps the ROM of an open tab for new data with new metadata (used by "Apply CUBE"):
+      /// a new tab for the same file name opens in the place of the old one, and the old tab and every tab that works on the same ROM close without asking.
+      /// Nothing is written to disk: the new tab is tagged as having unsaved changes (as soon as it has loaded), so saving (over the same file, or with Save As) stays the user's choice.
+      /// Returns the new tab, or null if the old tab is not open. Throws, before anything has been changed, if the metadata can not be read.
+      /// </summary>
+      public ViewPort ReplaceRomTab(ViewPort oldTab, byte[] newData, string[] metadataLines) {
+         var index = tabs.IndexOf(oldTab);
+         if (index < 0) return null;
+         var oldModel = oldTab.Model;
+         var fileName = oldTab.FileName ?? string.Empty;
+         var insertAt = tabs.Take(index).Count(tab => ModelOf(tab) != oldModel); // where the new tab goes once the old tabs are gone
+
+         // the same kind of model that File > Open makes for a .gba file with a .toml next to it
+         var metadata = new StoredMetadata(metadataLines);
+         IDataModel model = fileName.ToLower().EndsWith(".gba") ?
+            new HardcodeTablesModel(Singletons, newData, metadata) :
+            new PokemonModel(newData, metadata, Singletons);
+         var viewPort = new ViewPort(fileName, model, workDispatcher, Singletons, MapTutorials, FileSystem, PythonTool);
+
+         Add(viewPort); // selects the new tab, so closing the old ones below does not change the selection
+         // The tab counts as changed (and File > Save becomes available) once the new ROM has finished loading: saving writes the metadata of the model, which has to be complete.
+         _ = viewPort.InitializationWorkload.ContinueWith(task => workDispatcher.DispatchWork(() => viewPort.ChangeHistory.TagAsUnsaved()), TaskContinuationOptions.ExecuteSynchronously);
+         foreach (var tab in tabs.ToList()) {
+            if (tab == viewPort) continue;
+            if (ModelOf(tab) == oldModel) RemoveTab(tab, EventArgs.Empty);
+         }
+
+         var newIndex = tabs.IndexOf(viewPort);
+         while (newIndex > insertAt) {
+            SwapTabs(newIndex - 1, newIndex);
+            newIndex -= 1;
+         }
+         return viewPort;
+      }
+
+      /// <summary>The ROM that a tab shows or edits, or null for tabs that do not belong to one ROM.</summary>
+      private static IDataModel ModelOf(ITabContent tab) => tab switch {
+         IViewPort viewPort => viewPort.Model,
+         MapEditorViewModel map => map.ViewPort?.Model,
+         DexReorderTab dex => dex.Model,
+         SpriteGalleryTab gallery => gallery.Model,
+         SoundTab sound => sound.Model,
+         TilesetAnimationTab animations => animations.Model,
+         CharacterCustomizationTab customization => customization.Model,
+         IntroManagerTab intro => intro.Model,
+         _ => null,
+      };
+
+      /// <summary>Asks the "Apply CUBE" menu item again whether it can run: the open ROM may just have been edited, or saved, or restored by undo.</summary>
+      private void RefreshApplyCubeAvailability() {
+         foreach (var edit in QuickEditsMisc) {
+            if (edit is ApplyCubePatch) edit.TabChanged();
+         }
+      }
+
       public void CopyError() => fileSystem.CopyText = ErrorMessage;
 
       private async void ExecuteOpen(object arg) {
@@ -765,6 +889,10 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
                await editableViewPort.Model.InitializationWorkload;
                var importSuccessful = SelectedTab.TryImport(file, fileSystem);
                if (importSuccessful) return;
+            } else if (SelectedTab is SoundTab soundTab) {
+               // files dropped on the Sound tab (.mid, .s, .wav) go into the ROM that tab edits; anything else opens as usual
+               await soundTab.Model.InitializationWorkload;
+               if (soundTab.TryImport(file, fileSystem)) return;
             }
             UpdateRecentFiles(file.Name);
             string[] metadataText = new string[0];
@@ -790,7 +918,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
                   if (!Singletons.GameReferenceTables.TryGetValue(model.GetGameCode(), out var refTable)) refTable = null;
                   fileSystem.SaveMetadata(file.Name, viewPort.Model.ExportMetadata(refTable, Singletons.MetadataInfo).Serialize());
                   Debug.Assert(viewPort.ChangeHistory.IsSaved, "Put a breakpoint in ChangeHistory.CurrentChange, because a changable token is being created too soon!");
-                  if (model is HardcodeTablesModel hardcode) viewPort.Tools.LogTool.LogMessages.AddRange(hardcode.LoadingMessages);
+                  if (model is HardcodeTablesModel hardcode) viewPort.Tools?.LogTool?.LogMessages.AddRange(hardcode.LoadingMessages);
                }, TaskContinuationOptions.ExecuteSynchronously);
             }
             Add(viewPort);
@@ -1287,6 +1415,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          var collection = CreateGotoShortcuts(GotoViewModel);
          if (collection != null) GotoViewModel.Shortcuts = new ObservableCollection<GotoShortcutViewModel>(collection);
          GotoViewModel.PropertyChanged += GotoPropertyChanged;
+         ShortcutClock.Attach(GotoViewModel); // lets go of the previous tab's dialog
          if (SelectedTab is IEditableViewPort vp1 && vp1.Model is BaseModel bm) {
             var vm = GotoViewModel;
             vp1.InitializationWorkload.ContinueWith(task => {
@@ -1339,9 +1468,69 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
             }
             var anchor = model.GotoShortcuts[i].GotoAnchor;
             var text = model.GotoShortcuts[i].DisplayText;
-            results.Add(new GotoShortcutViewModel(gotoViewModel, viewPort, sprite, anchor, text));
+            var shortcut = new GotoShortcutViewModel(gotoViewModel, viewPort, sprite, anchor, text);
+            ShortcutIcons.CustomizeMenuButton(model, shortcut, anchor, model.GotoShortcuts[i].ImageAnchor); // Pokemon: Cradily, Items: Poke Ball (drawn when first shown)
+            ShortcutFallbackIcons.Attach(shortcut, anchor); // a built-in sprite, but only if the ROM and its metadata give the button no picture at all
+            results.Add(shortcut);
          }
+         AddEditorShortcuts(gotoViewModel, viewPort, results);
          return results;
+      }
+
+      /// <summary>
+      /// Top-level shortcuts for the Sound editor, the Animated Tiles editor and the Character Customization editor (they use the 'editor:' goto prefix, which ViewPort.Goto turns into opening the matching tab),
+      /// plus 'OW Sprites', which jumps straight to the overworld sprite table (its sprite gallery is shown inside the table).
+      /// </summary>
+      private static void AddEditorShortcuts(GotoControlViewModel gotoViewModel, IEditableViewPort viewPort, List<GotoShortcutViewModel> results) {
+         var model = viewPort.Model;
+         // every button gets its picture when it is first shown (ShortcutIcons), so preparing the dialog stays as light as it was.
+         // The picture of the loaded ROM wins; ShortcutFallbackIcons gives the button a built-in coloured sprite when the ROM has none (an unedited game has no flute, no Brendan...).
+         GotoShortcutViewModel AddButton(Func<IPixelViewModel> picture, string anchor, string text) {
+            var shortcut = new GotoShortcutViewModel(gotoViewModel, viewPort, picture, anchor, text);
+            ShortcutFallbackIcons.Attach(shortcut, anchor);
+            results.Add(shortcut);
+            return shortcut;
+         }
+         if (SoundTab.IsSupported(model) && !results.Any(shortcut => shortcut.DisplayText == "Sound")) {
+            AddButton(() => ShortcutIcons.PokeFlute(model), ViewPort.EditorGotoPrefix + "sound", "Sound"); // the Poke Flute item picture (the built-in picture is a Poke Flute too)
+         }
+         if (model.GetTable(HardcodeTablesModel.OverworldSprites) != null && !results.Any(shortcut => shortcut.DisplayText == "OW Sprites")) {
+            AddButton(() => ShortcutIcons.FirstOverworldSprite(model), HardcodeTablesModel.OverworldSprites, "OW Sprites"); // sprite 235 (RS Brendan, walking graphic), first picture; sprite 0 if the table is shorter; the built-in character if the ROM has none
+         }
+         // 'Intro Manager': the Pokémon, the professor's picture and the music of the new game intro (Emerald, FireRed and the games made from them)
+         if (IntroManagerTab.IsSupported(model) && !results.Any(shortcut => shortcut.DisplayText.Replace("\n", " ") == "Intro Manager")) {
+            AddButton(() => ShortcutIcons.BirchBag(model), ViewPort.EditorGotoPrefix + "intro", "Intro\nManager"); // Professor Birch's bag from the ROM's starter screen; the built-in bag of ShortcutFallbackIcons when the ROM has none (FireRed)
+         }
+         if (TilesetAnimationTab.IsSupported(model) && !results.Any(shortcut => shortcut.DisplayText == "Anim Tiles")) {
+            var animTiles = AddButton(() => FindItemIcon(model, "Wailmer Pail", "Pail", "Watering"), ViewPort.EditorGotoPrefix + "animations", "Anim Tiles");
+            animTiles.SetAnimationSource(() => ShortcutIcons.FlowerAnimation(model)); // the animated flower; the old picture stays if the ROM has no flower
+         }
+         if (CharacterCustomizationTab.IsSupported(model) && !results.Any(shortcut => shortcut.DisplayText.Replace("\n", " ") == "Character Customization")) {
+            AddButton(() => ShortcutIcons.CharacterFront(model) ?? ShortcutIcons.BrendanStanding(model), ViewPort.EditorGotoPrefix + "customization", "Character\nCustomization");
+         }
+      }
+
+      private static IPixelViewModel FindItemIcon(IDataModel model, params string[] nameHints) {
+         try {
+            var items = model.GetTable(HardcodeTablesModel.ItemsTableName);
+            if (items == null) return null;
+            var iconSegment = items.ElementContent.FirstOrDefault(segment => segment.Name == "icon" && segment is ArrayRunPointerSegment);
+            if (iconSegment == null) return null;
+            var names = model.GetOptions(HardcodeTablesModel.ItemsTableName);
+            var offset = items.ElementContent.Until(segment => segment == iconSegment).Sum(segment => segment.Length);
+            foreach (var hint in nameHints) {
+               for (int i = 0; i < names.Count && i < items.ElementCount; i++) {
+                  if (!names[i].Contains(hint, StringComparison.OrdinalIgnoreCase)) continue;
+                  var iconAddress = model.ReadPointer(items.Start + items.ElementLength * i + offset);
+                  if (model.GetNextRun(iconAddress) is ISpriteRun spriteRun && spriteRun.Start == iconAddress) {
+                     return SpriteDecorator.BuildSprite(model, spriteRun, useTransparency: true);
+                  }
+               }
+            }
+         } catch (Exception) {
+            // icons are decoration: never fail the shortcut list because of them
+         }
+         return null;
       }
 
       private void ForwardDelayedWork(object sender, Action e) => RequestDelayedWork?.Invoke(this, e);
@@ -1362,6 +1551,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          if (e.PropertyName == nameof(IViewPort.Name)) {
             // the file's display name changes whenever it's edited or saved (trailing *)
             workDispatcher.DispatchWork(runFile.RaiseCanExecuteChanged);
+            if (sender == SelectedTab) workDispatcher.DispatchWork(RefreshApplyCubeAvailability);
          }
 
          // when one tab's height updates, update other tabs by the same amount.
@@ -1411,12 +1601,12 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
       }
 
       private void AcceptError(object sender, string message) {
-         if (sender is MapEditorViewModel map) map.ViewPort.Tools.LogTool.LogMessages.Add("Error: " + message);
+         if (sender is MapEditorViewModel map) map.ViewPort.Tools?.LogTool?.LogMessages.Add("Error: " + message);
          ErrorMessage = message;
       }
 
       private void AcceptMessage(object sender, string message) {
-         if (sender is MapEditorViewModel map) map.ViewPort.Tools.LogTool.LogMessages.Add("Message: " + message);
+         if (sender is MapEditorViewModel map) map.ViewPort.Tools?.LogTool?.LogMessages.Add("Message: " + message);
          InformationMessage = message;
       }
 

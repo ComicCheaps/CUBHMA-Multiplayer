@@ -110,7 +110,9 @@ namespace HavenSoft.HexManiac.Core.Models.Runs.Sprites {
          for (int x = 0; x < pixels.GetLength(0); x++) for (int y = 0; y < pixels.GetLength(1); y++) {
             pixels[x, y] %= (int)Math.Pow(2, TilesetFormat.BitsPerPixel);
          }
+         var dataBefore = (byte[])data.Clone();
          SpriteRun.SetPixels(data, 0, pixels, TilesetFormat.BitsPerPixel);
+         if (data.SequenceEqual(dataBefore)) return this; // the same pixels: don't recompress (see LzSpriteRun.SetPixels)
          var newModelData = Compress(data, 0, data.Length);
          var newRun = model.RelocateForExpansion(token, this, newModelData.Count);
          for (int i = 0; i < newModelData.Count; i++) token.ChangeData(model, newRun.Start + i, newModelData[i]);
@@ -151,6 +153,12 @@ namespace HavenSoft.HexManiac.Core.Models.Runs.Sprites {
 
          for (int i = 0; i < tiles.Count; i++) {
             SpriteRun.SetPixels(data, i * tileSize, tiles[i], bpp);
+         }
+
+         if (run is LZRun) {
+            // the same tiles: don't recompress (see LzSpriteRun.SetPixels)
+            var dataBefore = Decompress(model, run.Start, allowLengthErrors: true);
+            if (dataBefore != null && dataBefore.SequenceEqual(data)) return run;
          }
 
          var newModelData = run is LZRun ? Compress(data, 0, data.Length) : data;

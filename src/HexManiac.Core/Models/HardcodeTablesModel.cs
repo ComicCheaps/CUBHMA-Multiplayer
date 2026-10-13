@@ -66,11 +66,21 @@ namespace HavenSoft.HexManiac.Core.Models {
          TrainerClassNamesTable = "data.trainers.classes.names",
          ConversionDexTableName = "data.pokedex.hoennToNational",
          DefaultTilemapNamespace = "graphics.new.tilemap",
+         DefaultTilesetNamespace = "graphics.new.tileset",
          DefaultPaletteNamespace = "graphics.new.palette",
          AbilityDescriptionsTable = "data.abilities.descriptions",
          PokeIconPaletteIndexTable = "graphics.pokemon.icons.index",
          BattleParticleSpriteTable = "graphics.moves.particles.sprites",
          BattleParticlePaletteTable = "graphics.moves.particles.palettes";
+
+      /// <summary>
+      /// The table that holds the species names: 'data.pokemon.names' in the vanilla games,
+      /// but the pokeemerald-expansion keeps the name as the first field of its stats table.
+      /// </summary>
+      public static string GetSpeciesNameTable(IDataModel model) => model.GetTable(PokemonNameTable) != null ? PokemonNameTable : PokemonStatsTable;
+
+      /// <summary>The table that holds the move names: 'data.pokemon.moves.names' in the vanilla games, the move stats table in the pokeemerald-expansion.</summary>
+      public static string GetMoveNameTable(IDataModel model) => model.GetTable(MoveNamesTable) != null ? MoveNamesTable : "data.pokemon.moves.stats";
 
       public const string
          MoveInfoListName = "moveinfo",

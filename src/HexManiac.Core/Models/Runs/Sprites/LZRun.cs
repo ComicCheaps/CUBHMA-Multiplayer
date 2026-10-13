@@ -19,6 +19,9 @@ namespace HavenSoft.HexManiac.Core.Models.Runs.Sprites {
       public override int Length => length;
       protected void InvalidateLength() => length = -1;
 
+      /// <summary>False if a run of this kind cannot be made from data that decompresses to this many bytes (a sprite needs enough bytes for all of its tiles).</summary>
+      protected virtual bool IsValidDecompressedLength(int decompressedLength) => true;
+
       public int DecompressedLength { get; }
 
       public override string FormatString => "`lz`";
@@ -173,6 +176,8 @@ namespace HavenSoft.HexManiac.Core.Models.Runs.Sprites {
       public LZRun FixupEnd(IDataModel model, ModelDelta token, int fixupStart) {
          var newData = RecommendedFixup(fixupStart);
          if (newData == null) return null;
+         if (!IsValidDecompressedLength(newData.ReadMultiByteValue(1, 3))) return null; // the sprite or palette would no longer fit in the data
+         if (IsCompressedLzData(newData, 0, AllowLengthErrors) < 1) return null; // the tokens before fixupStart were written by hand: if they copy from data that is not there yet, the result is not LZ data at all
          var newRun = model.RelocateForExpansion(token, this, newData.Count);
          var newStart = newRun.Start;
          for (int i = 0; i < newData.Count; i++) token.ChangeData(model, newStart + i, newData[i]);

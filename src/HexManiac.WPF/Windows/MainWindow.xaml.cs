@@ -1,4 +1,4 @@
-﻿using HavenSoft.HexManiac.Core;
+using HavenSoft.HexManiac.Core;
 using HavenSoft.HexManiac.Core.Models;
 using HavenSoft.HexManiac.Core.Models.Map;
 using HavenSoft.HexManiac.Core.Models.Runs;
@@ -149,7 +149,7 @@ namespace HavenSoft.HexManiac.WPF.Windows {
       }
 
       private void HandleRenderFailure(Exception ex) {
-         var result = FileSystem.ShowCustomMessageBox("HexManiacAdvance encountered a rendering error." + Environment.NewLine +
+         var result = FileSystem.ShowCustomMessageBox("CUBHMA encountered a rendering error." + Environment.NewLine +
             "The most common render thread failures are associated with video hardware or driver problems." + Environment.NewLine +
             "Do you want to disable hardware acceleration?");
          if (result == true) {
@@ -245,6 +245,7 @@ namespace HavenSoft.HexManiac.WPF.Windows {
       private ICommand CreateQuickEditCommand(IQuickEditItem edit) {
          var command = new StubCommand {
             CanExecute = arg => {
+               if (edit is IStandaloneQuickEdit) return true; // works without an open tab (it asks for the file)
                if (ViewModel.SelectedIndex < 0) return false;
                var tab = ViewModel[ViewModel.SelectedIndex];
                if (tab is MapEditorViewModel map) tab = map.ViewPort;
@@ -393,7 +394,14 @@ namespace HavenSoft.HexManiac.WPF.Windows {
 
       protected override void OnActivated(EventArgs e) {
          base.OnActivated(e);
+         ViewModel.ShortcutClock.WindowActive = true;
          if (ViewModel.GotoViewModel.ControlVisible) FocusGotoBox();
+      }
+
+      // the animated buttons of the Goto dialog stand still while another window (or another program) is in front, or this window is minimized
+      protected override void OnDeactivated(EventArgs e) {
+         base.OnDeactivated(e);
+         if (ViewModel != null) ViewModel.ShortcutClock.WindowActive = false;
       }
 
       public static FrameworkElement GetChild(DependencyObject depObj, string name, object dataContext) {
@@ -553,6 +561,31 @@ namespace HavenSoft.HexManiac.WPF.Windows {
             themeWindow.Show();
          }
       }
+
+      #region Movement permission grid opacity (View menu)
+
+      private void CollisionGridOpacityMenuOpened(object sender, RoutedEventArgs e) {
+         if (sender is MenuItem menu) UpdateCollisionGridOpacityChecks(menu);
+      }
+
+      private void CollisionGridOpacityClick(object sender, RoutedEventArgs e) {
+         var item = sender as MenuItem;
+         if (item == null || !int.TryParse(item.Tag as string, out var percent)) return;
+         ViewModel.CollisionGridOpacity = percent;
+         if (item.Parent is MenuItem menu) UpdateCollisionGridOpacityChecks(menu);
+      }
+
+      /// <summary>
+      /// The check mark follows the one stored value, whether it was last changed here or with the slider in the map editor.
+      /// A value that isn't one of the choices (the slider can pick any percent) leaves every choice unchecked.
+      /// </summary>
+      private void UpdateCollisionGridOpacityChecks(MenuItem menu) {
+         foreach (var choice in menu.Items.OfType<MenuItem>()) {
+            choice.IsChecked = int.TryParse(choice.Tag as string, out var percent) && percent == ViewModel.CollisionGridOpacity;
+         }
+      }
+
+      #endregion
 
       private void ExecuteAnimation(object sender, ExecutedRoutedEventArgs e) {
          if (!IsActive) return;

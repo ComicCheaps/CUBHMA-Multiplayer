@@ -26,6 +26,37 @@ namespace HavenSoft.HexManiac.Core.Models.Code {
       public string EnumTableName { get; }
       public int EnumOffset { get; }
 
+      /// <summary>
+      /// True for an argument written as 'name:list|h' (for example 'flag:scriptnamedflags|h').
+      /// That is a number first: it is shown in hex and typed as a number, like every 'name:|h' argument.
+      /// But the ROM's 'list' (a [[List]] in the TOML, indexed by the number) may also give some of the numbers a name.
+      /// Those names are shown when decompiling, accepted when compiling, and only suggested while the user is typing a letter.
+      /// A ROM without the list (or a list with gaps) simply keeps the plain numbers.
+      /// </summary>
+      public bool IsNumberOrName => IsNumberOrNameSpec(EnumTableName);
+
+      /// <summary>The list or table of an EnumTableName, without a trailing '|h' or '|z'. Null if there is no EnumTableName.</summary>
+      public string EnumListName => GetListName(EnumTableName);
+
+      public static string GetListName(string enumTableName) {
+         if (enumTableName == null) return null;
+         var bar = enumTableName.IndexOf('|');
+         return bar < 0 ? enumTableName : enumTableName.Substring(0, bar);
+      }
+
+      /// <summary>True for 'list|h': a number that can also be written as a name from the list.</summary>
+      public static bool IsNumberOrNameSpec(string enumTableName) {
+         if (string.IsNullOrEmpty(enumTableName)) return false;
+         var bar = enumTableName.IndexOf('|');
+         return bar > 0 && enumTableName.Substring(bar) == "|h";
+      }
+
+      /// <summary>
+      /// The name of the table or list that holds the options for an EnumTableName.
+      /// Only 'list|h' is split up, every other spelling (including '|h' on its own) is returned as it is.
+      /// </summary>
+      public static string GetOptionsName(string enumTableName) => IsNumberOrNameSpec(enumTableName) ? GetListName(enumTableName) : enumTableName;
+
       public int Length(IDataModel model, int start) => length;
 
       public ScriptArg(string token) {
@@ -115,8 +146,23 @@ namespace HavenSoft.HexManiac.Core.Models.Code {
       }
 
       public bool FitsInRange(IDataModel model, int address) {
-         if (string.IsNullOrEmpty(EnumTableName) || EnumTableName.StartsWith("|")) return true;
+         if (string.IsNullOrEmpty(EnumTableName) || EnumTableName.StartsWith("|") || IsNumberOrName) return true;
          return model.ReadMultiByteValue(address, length) < model.GetOptions(EnumTableName).Count;
+      }
+
+      /// <summary>
+      /// Reads the text of one argument the way the compiler does: a number, or a name from the argument's list.
+      /// </summary>
+      /// <returns>True if the text could be understood.</returns>
+      public bool TryParseValue(IDataModel model, string text, out int value) => Convert(model, text, out value) == null;
+
+      private static bool TryParseNumber(string text, out int result) {
+         result = 0;
+         return
+            text.StartsWith("0x") && text.Substring(2).TryParseHex(out result) ||
+            text.StartsWith("0X") && text.Substring(2).TryParseHex(out result) ||
+            text.StartsWith("$") && text.Substring(1).TryParseHex(out result) ||
+            int.TryParse(text, out result);
       }
 
       private string Convert(IDataModel model, int value, int bytes) {
@@ -140,6 +186,20 @@ namespace HavenSoft.HexManiac.Core.Models.Code {
       private string Convert(IDataModel model, string value, out int result) {
          result = 0;
          var parseType = "as a number";
+         if (IsNumberOrName) {
+            // numbers always win: only text that is not a number is looked up in the list
+            if (TryParseNumber(value, out result)) {
+               result += EnumOffset;
+               return null;
+            }
+            var options = model.GetOptions(EnumListName);
+            if (options.Count == 0) return $"Could not parse '{value}' {parseType}."; // the ROM has no names for this argument
+            if (ArrayRunEnumSegment.TryParse(EnumListName, model, value, out result)) {
+               result += EnumOffset;
+               return null;
+            }
+            return $"Could not parse '{value}' as a number or from {EnumListName}.";
+         }
          if (!string.IsNullOrEmpty(EnumTableName)) {
             if (!EnumTableName.StartsWith("|")) parseType = "from " + EnumTableName;
             if (ArrayRunEnumSegment.TryParse(EnumTableName, model, value, out result)) {

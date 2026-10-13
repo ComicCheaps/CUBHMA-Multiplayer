@@ -1,3 +1,49 @@
+# CUBHMA 0.7
+
+**CUBHMA** (Cradi's Unofficial Build of Hex Maniac Advance) is the official home of Cradi's fork of [Hex Maniac Advance](https://github.com/haven1433/HexManiacAdvance). It keeps everything the regular HMA does and adds a faster core plus a set of extra editors for pokeemerald-expansion projects.
+
+> **Works best with [Cradi's Ultimate Build of Emerald (CUBE)](https://github.com/kcradi/CUBHMA/releases).** CUBHMA also opens vanilla Emerald, FireRed, and other HMA-supported games, but the extra editors below are built around CUBE's expanded data.
+
+## What CUBHMA adds over regular Hex Maniac Advance
+
+**Performance**
+* Pokemon editor no longer lags when switching or editing Pokemon.
+* Map editor zoom is smooth (about 60 fps), using a shared transform and GPU-assisted zooming.
+* Much faster tab switching: the whole-ROM checksum is skipped and only stale parts are rebuilt.
+* Virtualized drop-downs and galleries, so huge lists open instantly.
+* Faster map-header music list, cheaper table-tool refreshes, and sprites that draw only on demand.
+
+**New editors**
+* **Sound**: Pokemon cry editor, song insertion (Sappy / mid2agb, with a built-in C# port of mid2agb), MIDI import, per-song voicegroups, "+ Add new song", plus play and export.
+* **Animated Tiles**: edit tileset animations and animated doors.
+* **Character Customization**: skin tone, clothes, and secondary colour for the player.
+* **OW Sprites**: gallery view, new palettes on import, field effects and reflection palettes, and safe copy-on-write for shared sprite data.
+* **Intro Manager**: professor's Pokemon, music, and picture for Emerald, CUBE, and FireRed, with drop-down lists instead of hex.
+
+**Existing editors, improved**
+* **Trainers**: expansion team editor, Showdown / .party import, AI checkboxes, and a sprite drop-down.
+* **Map editor**: event templates (trainer, NPC, item, mart, tutor, trade, legendary), berry trees, a "?" placeholder for dynamic-sprite events, movement-grid opacity, and wild encounter slot chances.
+* **Image editor**: copy/paste of tiles between tabs now works, even across different tilesets.
+* Main-menu icons for the new sections.
+* Support for pokeemerald-expansion data layouts.
+
+**Tools**
+* *Apply CUBE to a vanilla Emerald ROM...* creates CUBE from your own Emerald ROM using a built-in BPS patch and the CUBE metadata.
+
+![Goto main menu](docs/images/goto-menu.png)
+
+![Character Customization](docs/images/character-customization.png)
+
+![Animated Tiles](docs/images/animated-tiles.png)
+
+![OW Sprites](docs/images/ow-sprites.png)
+
+![Sound](docs/images/sound.png)
+
+---
+
+## Original Hex Maniac Advance README
+
 # Hex Maniac Advance
 
 HexManiacAdvance is an all-purpose editor designed for editing Pokemon GBA games. It specifically targets the English games Ruby (AXVE), Sapphire (AXPE), FireRed (BPRE), LeafGreen (BPGE), and Emerald (BPEE). It has a reduced set of features when opening other files.

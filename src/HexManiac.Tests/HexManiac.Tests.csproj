@@ -31,6 +31,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- the indexed PNG reader/writer is plain .NET code that lives in the WPF project, which a test project can't reference: compile it here (IndexedPngTests); the Crc32.NET package it needs comes with the Core project -->
+    <Compile Include="$(SolutionDir)src\HexManiac.WPF\Resources\IndexedPng.cs" Link="IndexedPng\IndexedPng.cs" />
+    <Compile Include="$(SolutionDir)src\HexManiac.WPF\Resources\IndexedPngReader.cs" Link="IndexedPng\IndexedPngReader.cs" />
+    <Compile Include="$(SolutionDir)src\HexManiac.WPF\Resources\IndexedPngWriter.cs" Link="IndexedPng\IndexedPngWriter.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="test_compiled\Expand01_-_Move_Stats.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

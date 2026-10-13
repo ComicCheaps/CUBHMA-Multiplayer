@@ -139,8 +139,8 @@ graphics.trainers.animations.frames,        1436B8, 1436B8, 1436D8, 1436D8, 10BD
 graphics.trainers.coordinates.front,        031AE0, 031AE0, 031AE0, 031AE0, 037E78, 037E78, 037E8C, 037E8C, 05B614, [x. y. unused:]graphics.trainers.sprites.front
 graphics.trainers.palettes.front,           031B98, 031B98, 031B98, 031B98, 03474C, 03474C, 034760, 034760, 05B784, [palette<`lzp4`> index: unused:]graphics.trainers.sprites.front
 graphics.trainers.sprites.back.throw,       031B60, 031B60, 031B60, 031B60,       ,       ,       ,       ,       , [sprite<`lzs4x8x8`> size: index:]3
-graphics.trainers.sprites.back.throw,             ,       ,       ,       , 03F8A0, 03F8A0, 03F8B4, 03F8B4,       , [tileTag:|h paletteTag:|h oam<> anims<> sprites<`osl|graphics.trainers.palettes.back:sprite`> affineAnimations<> callback<>]graphics.trainers.sprites.back.enter
-graphics.trainers.sprites.back.throw,             ,       ,       ,       ,       ,       ,       ,       , 06A168, [tileTag:|h paletteTag:|h oam<> anims<> sprites<`osl|graphics.trainers.palettes.back:sprite`> affineAnimations<> callback<>]graphics.trainers.sprites.back.enter
+graphics.trainers.sprites.back.throw,             ,       ,       ,       , 03F8A0, 03F8A0, 03F8B4, 03F8B4,       , [titleTag:|h paletteTag:|h oam<> anims<> sprites<`osl|graphics.trainers.palettes.back:sprite`> affineAnimations<> callback<>]graphics.trainers.sprites.back.enter
+graphics.trainers.sprites.back.throw,             ,       ,       ,       ,       ,       ,       ,       , 06A168, [titleTag:|h paletteTag:|h oam<> anims<> sprites<`osl|graphics.trainers.palettes.back:sprite`> affineAnimations<> callback<>]graphics.trainers.sprites.back.enter
 graphics.trainers.coordinates.back,               ,       ,       ,       , 03240C, 03240C, 032420, 032420,       , [x. y. unused:]graphics.trainers.sprites.back.enter
 graphics.trainers.palettes.back,                  ,       ,       ,       , 0335D4, 0335D4, 0335E8, 0335E8, 05DFDC, [pal<`lzp4`> sprite::]graphics.trainers.sprites.back.enter
 graphics.trainers.palettes.back,            030E14, 030E14, 030E14, 030E14,       ,       ,       ,       ,       , [pal<`lzp4`> sprite::]graphics.trainers.sprites.back.throw
@@ -158,6 +158,7 @@ scripts.pokemon.animations.back.natureMod,        ,       ,       ,       ,     
 graphics.pokemon.animations.options.front,        ,       ,       ,       ,       ,       ,       ,       , 17F53C, [thumb<>]
 graphics.pokemon.animations.options.back,         ,       ,       ,       ,       ,       ,       ,       , 17F608, [extremeAnim.graphics.pokemon.animations.options.front mediumAnim.graphics.pokemon.animations.options.front mildAnim.graphics.pokemon.animations.options.front]25 // The game uses 3 front animations per back animation. The one picked depends on the Pokémon's nature.
 graphics.pokemon.animations.front,                ,       ,       ,       ,       ,       ,       ,       , 06EDE8, [index.graphics.pokemon.animations.options.front]data.pokemon.names-1
+graphics.pokemon.animations.delay,               ,       ,       ,       ,       ,       ,       ,       , 06EDDC, [delay.]data.pokemon.names-1 // Game frames the front animation waits before its movement starts (sMonAnimationDelayTable). It follows graphics.pokemon.animations.front directly.
 graphics.pokemon.animations.back,                 ,       ,       ,       ,       ,       ,       ,       , 17F488, [index.graphics.pokemon.animations.options.back]data.pokemon.names
 graphics.pokemon.animations.frames,               ,       ,       ,       ,       ,       ,       ,       , 05E7BC, [data<[frames<[frame: time:]!FFFF0000>]1>]data.pokemon.names  // every pokemon has at least 2 (except Spinda), and some have 3.
 graphics.pokedex.habitats,                        ,       ,       ,       , 102F44, 102F1C, 102FBC, 102F94,       , [sprite<`lzs4x8x6`> pal<`ucp4`>]data.pokedex.habitat.names+6
@@ -904,8 +905,6 @@ data.battlefrontier.battlepike.openlevel.pool1, ,,,, ,,,, 612304, [species:data.
 data.battlefrontier.battlepike.openlevel.pool2, ,,,, ,,,, 612308, [species:data.pokemon.names levelDelta: move1:data.pokemon.moves.names move2:data.pokemon.moves.names move3:data.pokemon.moves.names move4:data.pokemon.moves.names]3
 data.battlefrontier.battlepike.openlevel.pool3, ,,,, ,,,, 61230C, [species:data.pokemon.names levelDelta: move1:data.pokemon.moves.names move2:data.pokemon.moves.names move3:data.pokemon.moves.names move4:data.pokemon.moves.names]3
 data.battlefrontier.battlepike.openlevel.pool4, ,,,, ,,,, 612310, [species:data.pokemon.names levelDelta: move1:data.pokemon.moves.names move2:data.pokemon.moves.names move3:data.pokemon.moves.names move4:data.pokemon.moves.names]3
-
-scripts.newgame.prologue,                  ,       ,       ,       , 12F49C, 12F474, 12F514, 12F4EC,       , [text<"">]3
 
 // From Soup
 data.statstages.accuracy,            01C578, 01C578, 01C578, 01C578, 01E108, 01E108, 01E11C, 01E11C, 046918, [numerator. divisor. unused:]13

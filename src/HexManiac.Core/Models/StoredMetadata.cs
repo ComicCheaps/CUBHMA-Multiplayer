@@ -115,6 +115,12 @@ namespace HavenSoft.HexManiac.Core.Models {
             if (continueCurrentItemIndex) {
                if (cleanLine.EndsWith(",")) cleanLine = cleanLine.Substring(0, cleanLine.Length - 1);
                currentItemChildren.Add(cleanLine.Replace("'''", string.Empty));
+               // the comment after an element of a multi-line list ('''name''',# comment) belongs to that element, just like for a single-line element
+               var elementEnd = line.Split("'''").Last();
+               if (elementEnd.Contains("#")) {
+                  if (currentItemChildrenComments == null) currentItemChildrenComments = new();
+                  currentItemChildrenComments[currentItemChildren.Count - 1] = elementEnd.Split("#")[1].Trim();
+               }
                continue;
             }
 

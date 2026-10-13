@@ -203,6 +203,7 @@ namespace HavenSoft.HexManiac.Core.Models {
             foreach (var list in metadata.Lists) {
                lists[list.Name] = new ValidationList(list.Hash, list, list.Comments);
             }
+            romScriptLines = null; // a script parser may have asked for commands before the ROM's own were loaded
             var anchorHashes = new Dictionary<string, string>();
 
             // load MatchedWords before loading NamedAnchors, since some tables may have length based on constants (like type names)
@@ -1073,6 +1074,11 @@ namespace HavenSoft.HexManiac.Core.Models {
                // if the only thing changed was the anchor, then don't change the format, just merge the anchor
                existingRun = runs[index];
                changeToken.RemoveRun(existingRun);
+               if (existingRun is WordRun oldWord && !(run is WordRun newWord && newWord.SourceArrayName == oldWord.SourceArrayName)) {
+                  // the named constant at this cell is replaced by another format: the name no longer matches this cell
+                  changeToken.RemoveMatchedWord(oldWord.Start, oldWord.SourceArrayName);
+                  if (matchedWords.TryGetValue(oldWord.SourceArrayName, out var oldWords)) oldWords.Remove(oldWord.Start);
+               }
                if (existingRun is PointerRun) {
                   var needClearPointerRun = !(run is NoInfoRun) && !(run is PointerRun);
                   if (((run as OffsetPointerRun)?.Offset ?? 0) != ((existingRun as OffsetPointerRun)?.Offset ?? 0)) needClearPointerRun = true;
@@ -1090,8 +1096,14 @@ namespace HavenSoft.HexManiac.Core.Models {
                      ModifyAnchorsFromPointerArray(changeToken, arrayRun1, null, arrayRun1.ElementCount, ClearPointerFormat);
                   } else {
                      ModifyAnchorsFromPointerArray(changeToken, tableRun1, arrayRun1, arrayRun1.ElementCount, ClearPointerFormat);
+                     // a pointer of the old table that is not a pointer cell of the new table (same element length, different fields) stops pointing
+                     if (!arrayRun1.DataFormatMatches(tableRun1)) ModifyAnchorsFromPointerArray(changeToken, arrayRun1, null, arrayRun1.ElementCount, (segment, segments, parentIndex, token, start) => { if (!IsPointerCell(tableRun1, start)) ClearPointerFormat(segment, segments, parentIndex, token, start); });
                   }
                   index = BinarySearch(run.Start); // have to recalculate index, because ClearPointerFormat can removed runs.
+               } else if (existingRun is ITableRun replacedTable && run is not ITableRun) {
+                  // the table is replaced by something that is not a table: the pointer cells it had are no longer pointers
+                  ModifyAnchorsFromPointerArray(changeToken, replacedTable, null, replacedTable.ElementCount, ClearPointerFormat);
+                  index = BinarySearch(run.Start);
                }
                SetIndex(index, run);
                changeToken.AddRun(run);
@@ -1151,6 +1163,14 @@ namespace HavenSoft.HexManiac.Core.Models {
       public override bool WritePointer(ModelDelta changeToken, int address, int pointerDestination) {
          if (pointerOffsets.TryGetValue(address, out var offset)) pointerDestination += offset;
          return base.WritePointer(changeToken, address, pointerDestination);
+      }
+
+      private static bool IsPointerCell(ITableRun table, int address) {
+         if (address < table.Start || address >= table.Start + table.Length) return false;
+         var offset = table.ConvertByteOffsetToArrayOffset(address);
+         if (offset.SegmentStart != address || offset.SegmentIndex < 0 || offset.SegmentIndex >= table.ElementContent.Count) return false;
+         var segment = table.ElementContent[offset.SegmentIndex];
+         return segment.Type == ElementContentType.Pointer || segment is ArrayRunRecordSegment; // a record segment might be a pointer: leave it alone
       }
 
       /// <summary>
@@ -1649,7 +1669,7 @@ namespace HavenSoft.HexManiac.Core.Models {
       public override int GetScriptLength(IScriptStartRun run, IDictionary<int, int> destinationLengths) {
          var gameHash = this.GetShortGameCode();
          IReadOnlyList<IScriptLine> lines = null;
-         if (run is XSERun) lines = singletons.ScriptLines;
+         if (run is XSERun) lines = GetScriptLines(singletons.ScriptLines);
          if (run is BSERun) lines = singletons.BattleScriptLines;
          if (run is ASERun) lines = singletons.AnimationScriptLines;
          if (run is TSERun) lines = singletons.BattleAIScriptLines;
@@ -1771,6 +1791,7 @@ namespace HavenSoft.HexManiac.Core.Models {
       }
 
       public override void SetList(ModelDelta changeToken, string name, IEnumerable<string> list, IReadOnlyDictionary<int, string> comments, string hash) {
+         if (name == ScriptMacroListName) romScriptLines = null;
          if (!lists.TryGetValue(name, out var oldContent)) oldContent = null;
          if (list == null && lists.ContainsKey(name)) lists.Remove(name);
          else {
@@ -1781,6 +1802,38 @@ namespace HavenSoft.HexManiac.Core.Models {
 
       public override bool TryGetList(string name, out ValidationList list) {
          return lists.TryGetValueCaseInsensitive(name, out list);
+      }
+
+      /// <summary>
+      /// A ROM whose script engine differs from vanilla (decomp hacks such as pokeemerald-expansion) can describe its
+      /// commands in a list called 'scriptmacros'. Each entry is a line in the same syntax as scriptReference.txt
+      /// (a command line such as "23 49 38 23 0A vsseeker_rematchid rematchId:" or a macro line). Those lines are
+      /// placed in front of the shared reference, so they take precedence over the built-in definitions.
+      /// </summary>
+      public const string ScriptMacroListName = "scriptmacros";
+      private IReadOnlyList<Code.IScriptLine> romScriptLines;
+      private IReadOnlyList<Code.IScriptLine> romScriptLinesSource;
+      public override IReadOnlyList<Code.IScriptLine> GetScriptLines(IReadOnlyList<Code.IScriptLine> sharedLines) {
+         if (romScriptLines != null && romScriptLinesSource == sharedLines) return romScriptLines;
+         romScriptLinesSource = sharedLines;
+         if (!TryGetList(ScriptMacroListName, out var list) || list == null || list.Count == 0) return sharedLines; // not cached: the list may still be loading
+         var extra = new List<Code.IScriptLine>();
+         foreach (var raw in list) {
+            var line = raw?.Trim();
+            if (string.IsNullOrEmpty(line) || line.StartsWith("#")) continue;
+            try {
+               if (Code.MacroScriptLine.IsMacroLine(line)) {
+                  var macro = new Code.MacroScriptLine(line);
+                  if (macro.IsValid) extra.Add(macro);
+               } else {
+                  extra.Add(new Code.XSEScriptLine(line));
+               }
+            } catch (Exception) {
+               // a malformed line in the metadata shouldn't stop the ROM from loading
+            }
+         }
+         if (extra.Count == 0) return romScriptLines = sharedLines;
+         return romScriptLines = extra.Concat(sharedLines).ToList();
       }
 
       // for each of the results, we recognized it as text: see if we need to add a matching string run / pointers
@@ -2702,7 +2755,11 @@ namespace HavenSoft.HexManiac.Core.Models {
          return sourcesDirectlyToThis;
       }
 
-      private T MoveRun<T>(ModelDelta changeToken, T run, int length, int newStart) where T : IFormattedRun {
+      private T MoveRun<T>(ModelDelta changeToken, T run, int length, int newStart) where T : IFormattedRun => MoveRun(changeToken, run, length, newStart, run.Start, length);
+
+      /// <param name="bodyStart">The start of all the data that is moving (a script moves all of its sections at once, and each section is moved as its own run).</param>
+      /// <param name="bodyLength">The length of all the data that is moving.</param>
+      private T MoveRun<T>(ModelDelta changeToken, T run, int length, int newStart, int bodyStart, int bodyLength) where T : IFormattedRun {
          var logName = run.Start.ToAddress();
          if (anchorForAddress.TryGetValue(run.Start, out var existingAnchorName)) logName = existingAnchorName;
          RaiseLogMessage($"Moving {run.GetType().Name} {logName} to {newStart.ToAddress()}");
@@ -2729,13 +2786,19 @@ namespace HavenSoft.HexManiac.Core.Models {
                var nextRun = GetNextRun(run.Start + 1);
                if (nextRun.Start >= run.Start + length) break;
                if (nextRun is IScriptStartRun sRun) {
-                  MoveRun(changeToken, sRun, 1, newStart + sRun.Start - run.Start);
+                  MoveRun(changeToken, sRun, 1, newStart + sRun.Start - run.Start, bodyStart, bodyLength);
                } else {
                   // clear format of any constants/pointers/streams that is considered part of the script
                   ClearFormatAndAnchors(changeToken, nextRun.Start, nextRun.Length);
                }
             }
             while (true);
+
+            // the pointers inside the script (a section that jumps back to the start of the script) were just cleared with the rest of its format:
+            // the script does not move with a record of them, because the old copy is about to be erased and the new copy is formatted again when it is read.
+            foreach (var source in run.PointerSources?.ToList() ?? new()) {
+               if (bodyStart <= source && source < bodyStart + bodyLength) run = (T)run.RemoveSource(source);
+            }
          }
 
          // move data
