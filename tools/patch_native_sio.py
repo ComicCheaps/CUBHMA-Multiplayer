@@ -154,7 +154,7 @@ if ($NativeSioRole -eq "master") {
 } elseif ($NativeSioRole -eq "slave") {
     $sioRoleDefs += "-DPAYLOAD_NATIVE_SIO_SLAVE"
 }
-'''
+"""
     text = replace_once(text, defs_anchor, defs_insert, "compiler defines block")
 
     compile_anchor = '& $gcc @common -Os -fno-jump-tables -fno-guess-branch-probability -fno-move-loop-invariants @stackFlags @noInterwork -mthumb -c (Join-Path $root "payload\\sio.c") -o (Join-Path $build "sio.o")'
