@@ -1,4 +1,4 @@
-# CUBHMA 0.7
+# CUBHMA
 
 **CUBHMA** (Cradi's Unofficial Build of Hex Maniac Advance) is the official home of Cradi's fork of [Hex Maniac Advance](https://github.com/haven1433/HexManiacAdvance). It keeps everything the regular HMA does and adds a faster core plus a set of extra editors for pokeemerald-expansion projects.
 
@@ -39,6 +39,62 @@
 ![OW Sprites](docs/images/ow-sprites.png)
 
 ![Sound](docs/images/sound.png)
+
+## Battle options in CUBE
+
+### Turning battle triggers on (scripts)
+
+Set these from a map script with `setflag FLAG_NAME` and turn them off with `clearflag FLAG_NAME`. They stay set until you clear them.
+
+| What you want | Flag | ID |
+|---|---|---|
+| Player can Terastallize | `FLAG_TERA_ORB_CHARGED` (also needs the Tera Orb in the bag) | 0x1154 |
+| Tera Orb never runs out | `FLAG_TERA_ORB_NO_COST` | 0x1153 |
+| Player can Dynamax | `FLAG_DYNAMAX_BATTLE` (also needs the Dynamax Band in the bag) | 0x1155 |
+| Wild Pokémon use smart AI (needed for wild Tera / Dynamax) | `FLAG_SMART_WILD_AI` | 0x1159 |
+| Every wild encounter is a double battle | `FLAG_FORCE_DOUBLE_WILD` | 0x115A |
+| No random wild encounters | `FLAG_NO_WILD_ENCOUNTERS` | 0x115B |
+| Can't catch wild Pokémon | `FLAG_NO_CATCHING` | 0x115C |
+| Can't run from wild battles | `FLAG_NO_RUNNING` | 0x115D |
+| Inverse battle (type chart flipped) | `FLAG_INVERSE_BATTLE` | 0x1156 |
+| Sky Battle | `FLAG_SKY_BATTLE` | 0x114F |
+| Sleep clause | `FLAG_SLEEP_CLAUSE` | 0x1152 |
+| No white-out against Trainers | `FLAG_NO_WHITEOUT` | 0x1151 |
+| Guaranteed shiny encounters | `FLAG_FORCE_SHINY` | 0x1158 |
+| Never shiny | `FLAG_FORCE_NO_SHINY` | 0x1157 |
+| Trainers don't spot you | `FLAG_NO_TRAINER_SEE` | 0x114C |
+| AI plays your Pokémon | `FLAG_AI_VS_AI_BATTLE` | 0x1150 |
+| Disable the bag in battle | `VAR_NO_BAG_USE` (a var; use `setvar`) | 0x437F |
+
+### Giving trainers Tera, Dynamax, Mega and Z-Moves (Trainer editor)
+
+Open **Goto → Trainers**, pick the trainer, and edit the **Team** box. Put the options on their own line under the Pokémon's moves. **The line must start with `* `** or it is ignored.
+
+```
+50 Charizard (IVs=31)
+- Flamethrower
+- Air Slash
+- Roost
+- Solar Beam
+* tera=Fire
+```
+
+| Gimmick | What to type | Needs |
+|---|---|---|
+| **Terastallize** | `* tera=Fire` (any type except Normal) | Nothing else. No orb or flag. |
+| **Dynamax** | `* dynamax=yes` | Nothing else. No band or flag. |
+| **Gigantamax** | `* gmax=yes` (also makes it Dynamax) | A Pokémon that has a Gigantamax form |
+| **Dynamax strength** | `* dmaxlevel=10` (0–10; also makes it Dynamax) | Nothing else |
+| **Mega Evolution** | Give the Pokémon its Mega Stone as the held item (`@"Charizardite X"`) | Nothing else. No ring. |
+| **Z-Move** | Give the Pokémon its Z-Crystal as the held item | Nothing else. No ring. |
+
+You can combine options on one line: `* tera=Fire nature=Timid` or `* dynamax=yes dmaxlevel=10`.
+
+Notes:
+- A Pokémon uses only one gimmick per battle. A Pokémon holding a Mega Stone or Z-Crystal can't Dynamax.
+- A trainer can only Dynamax once per battle.
+- Without a "smart Tera" AI flag, trainers Terastallize on the first turn. With it (`smartTera` in the trainer's AI flags), they pick a better moment.
+- Pasting a Showdown or `.party` team also works: `Tera Type: Fire`, `Dynamax: Yes`, `Dynamax Level: 10`.
 
 ---
 
