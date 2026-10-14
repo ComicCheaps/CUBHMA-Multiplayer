@@ -30,6 +30,20 @@
 **Tools**
 * *Apply CUBE to a vanilla Emerald ROM...* creates CUBE from your own Emerald ROM using a built-in BPS patch and the CUBE metadata.
 
+## Experimental: local Emerald multiplayer
+
+This branch contains an experimental local co-op path based on the pinned [gen3-poke-multiplayer](https://github.com/Wired-Ariel/gen3-poke-multiplayer) payload. It targets clean English Emerald v1.0 as the starting ROM; it is not yet a release-ready feature.
+
+See [the multiplayer development guide](docs/multiplayer-development.md) for the decompilation integration, payload build, BPS patch creation and two-instance mGBA test. Once you've built the locally modified `pokeemerald.gba`, the helper can run the remaining packaging steps:
+
+~~~powershell
+python tools/integrate_pokeemerald.py --pokeemerald "C:/src/pokeemerald"
+# Build the modified ROM in your normal pokeemerald environment first.
+./tools/prepare_multiplayer_patch.ps1 -PokeemeraldRoot "C:/src/pokeemerald" -CleanEmeraldRom "C:/path/to/your-clean-emerald.gba"
+~~~
+
+The helper uses your own ROM files locally, verifies the original ROM's fingerprint, and round-trip-checks the generated BPS patch. It does not download or include a ROM. Actual game-side payload loading and multiplayer behavior still need testing against the compatible local build and two mGBA instances.
+
 ![Goto main menu](docs/images/goto-menu.png)
 
 ![Character Customization](docs/images/character-customization.png)
