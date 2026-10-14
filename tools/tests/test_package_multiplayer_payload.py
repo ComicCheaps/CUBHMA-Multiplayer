@@ -26,6 +26,10 @@ def fake_payload(size=32):
     return bytes(payload)
 
 
+def package_small(target_rom, payload, map_text, output_size=0x5000):
+    return package_small(target_rom, payload, map_text, output_size=output_size)
+
+
 class PackagePayloadTests(unittest.TestCase):
     def test_parse_payload_end_from_linker_map(self):
         text = " .bss 0x0203D000 0x80\n 0x0203D080 payload_end = .\n"
@@ -38,11 +42,16 @@ class PackagePayloadTests(unittest.TestCase):
         payload_offset = (len(source) + 3) & ~3
         address, size, clear_size = struct.unpack_from("<III", result, 0x1000)
         self.assertEqual(0x08000000 + payload_offset, address)
+        self.assertEqual(0x5000, len(result))
         self.assertEqual(len(payload), size)
         self.assertEqual(0x0203D080 - PAYLOAD_BASE, clear_size)
         self.assertEqual(payload, result[payload_offset:payload_offset + len(payload)])
         expected = (-(sum(result[0xA0:0xBD]) + 0x19)) & 0xFF
         self.assertEqual(expected, result[0xBD])
+
+    def test_rejects_output_size_that_cannot_fit_payload(self):
+        with self.assertRaisesRegex(ValueError, "Output ROM size"):
+            package_small(fake_rom(), fake_payload(), "0x0203D080 payload_end = .", output_size=0x4000)
 
     def test_rejects_target_without_descriptor(self):
         rom = bytearray(fake_rom())

@@ -58,7 +58,7 @@ python tools/package_multiplayer_payload.py "C:/src/pokeemerald/pokeemerald.gba"
 python tools/build_multiplayer_patch.py "C:/path/to/your-clean-emerald.gba" "./build/pokeemerald-multiplayer-embedded.gba" --output "./src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz"
 ~~~
 
-The packager validates the payload HOOK header, linker-map end symbol, reserved EWRAM space, descriptor uniqueness and game code. The BPS tool verifies the clean ROM fingerprint and round-trips the patch byte-for-byte. Generated ROM/payload files are git-ignored.
+The packager validates the payload HOOK header, linker-map end symbol, reserved EWRAM space, descriptor uniqueness and game code. It pads the output to a full 32 MiB GBA ROM window so the appended payload at 0x09000000 stays within the cartridge address space. The BPS tool verifies the clean ROM fingerprint and round-trips the patch byte-for-byte. Generated ROM/payload files are git-ignored.
 
 6. Build CUBHMA after the two scripts and patch exist:
 

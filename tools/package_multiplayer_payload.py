@@ -38,7 +38,7 @@ def calc_header_checksum(rom: bytearray) -> None:
     rom[0xBD] = (-(sum(rom[0xA0:0xBD]) + 0x19)) & 0xFF
 
 
-def package_payload(target_rom: bytes, payload: bytes, map_text: str) -> bytes:
+def package_payload(target_rom: bytes, payload: bytes, map_text: str, output_size: int = ROM_END - ROM_BASE) -> bytes:
     if len(target_rom) < 0xC0:
         raise ValueError("Built target is too small to be a GBA ROM.")
     if target_rom[0xAC:0xB0] != GAME_CODE:
@@ -72,16 +72,22 @@ def package_payload(target_rom: bytes, payload: bytes, map_text: str) -> bytes:
             "Integrate the loader and rebuild the target ROM first."
         )
 
+    rom_window_size = ROM_END - ROM_BASE
     payload_offset = (len(target_rom) + 3) & ~3
-    if payload_offset + len(payload) > ROM_END - ROM_BASE:
+    if payload_offset + len(payload) > rom_window_size:
         raise ValueError("Payload would exceed the GBA's 32 MiB Game Pak ROM window.")
     rom_address = ROM_BASE + payload_offset
     if rom_address + len(payload) > ROM_END:
         raise ValueError("Payload address falls outside the supported Game Pak ROM window.")
+    if output_size < payload_offset + len(payload) or output_size > rom_window_size:
+        raise ValueError(
+            f"Output ROM size must fit the payload and stay within the 32 MiB Game Pak window; got {output_size:,} bytes."
+        )
 
     output = bytearray(target_rom)
     output.extend(b"\xFF" * (payload_offset - len(output)))
     output.extend(payload)
+    output.extend(b"\xFF" * (output_size - len(output)))
     struct.pack_into("<III", output, locations[0], rom_address, len(payload), clear_size)
     calc_header_checksum(output)
 
