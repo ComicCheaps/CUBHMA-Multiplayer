@@ -1,0 +1,28 @@
+name: Multiplayer tool checks
+
+on:
+  push:
+    branches:
+      - feature/multiplayer-patch-tool
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test BPS patch generator
+        run: python -m unittest discover -s tools/tests -v
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+      - name: Build CUBHMA
+        run: dotnet build HexManiacAdvance.sln -c Release -p:PlatformTarget=x64
+      - name: Test CUBHMA
+        run: dotnet test HexManiacAdvance.sln --no-build -c Release -p:PlatformTarget=x64 --logger "console;verbosity=normal"

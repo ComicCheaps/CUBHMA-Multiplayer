@@ -20,3 +20,6 @@ __pycache__/
 packages/
 
 
+
+# Generated locally from the user's own Emerald ROM; do not commit patch artifacts.
+src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz
