@@ -67,6 +67,12 @@
          They end up in the resources folder next to HexManiacAdvance.exe (and so in the release zip). To refresh them, just replace the two files. -->
     <None Include="..\HexManiac.Core\ViewModels\QuickEditItems\cube_emerald.bps.gz" Link="resources\cube_emerald.bps.gz"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
     <None Include="..\HexManiac.Core\ViewModels\QuickEditItems\cube_emerald.toml" Link="resources\cube_emerald.toml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+    <!-- Optional until the multiplayer ROM patch is built. When present, ship it beside the application like the CUBE patch. -->
+    <None Include="..\HexManiac.Core\ViewModels\QuickEditItems\multiplayer_emerald.bps.gz"
+          Condition="Exists('$(MSBuildProjectDirectory)\..\HexManiac.Core\ViewModels\QuickEditItems\multiplayer_emerald.bps.gz')"
+          Link="resources\multiplayer_emerald.bps.gz">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />

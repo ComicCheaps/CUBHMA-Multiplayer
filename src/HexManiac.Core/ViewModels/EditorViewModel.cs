@@ -578,6 +578,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
             new DecapNames(),
             new ApplyCFRUPatch { Editor = this },
             new ApplyCubePatch(this),
+            new ApplyMultiplayerPatch(this),
             new OpenSpriteGallery(),
             new OpenSoundEditor(),
             new OpenAnimatedTiles(),
@@ -871,10 +872,10 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          _ => null,
       };
 
-      /// <summary>Asks the "Apply CUBE" menu item again whether it can run: the open ROM may just have been edited, or saved, or restored by undo.</summary>
-      private void RefreshApplyCubeAvailability() {
+      /// <summary>Refreshes the availability of tools that patch an exact vanilla base ROM after it is edited, saved, or restored by undo.</summary>
+      private void RefreshBaseRomPatchAvailability() {
          foreach (var edit in QuickEditsMisc) {
-            if (edit is ApplyCubePatch) edit.TabChanged();
+            if (edit is ApplyCubePatch || edit is ApplyMultiplayerPatch) edit.TabChanged();
          }
       }
 
@@ -1551,7 +1552,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels {
          if (e.PropertyName == nameof(IViewPort.Name)) {
             // the file's display name changes whenever it's edited or saved (trailing *)
             workDispatcher.DispatchWork(runFile.RaiseCanExecuteChanged);
-            if (sender == SelectedTab) workDispatcher.DispatchWork(RefreshApplyCubeAvailability);
+            if (sender == SelectedTab) workDispatcher.DispatchWork(RefreshBaseRomPatchAvailability);
          }
 
          // when one tab's height updates, update other tabs by the same amount.
