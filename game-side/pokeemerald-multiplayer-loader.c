@@ -16,7 +16,6 @@
  * [0] appended payload ROM address, [1] payload byte size,
  * [2] payload_end - PAYLOAD_BASE (the EWRAM region to clear).
  */
-__attribute__((used, aligned(4)))
 const u32 gCubhmaMultiplayerPayloadDescriptor[3] = {
     0xC0B4A001u,
     0xC0B4A002u,
