@@ -73,6 +73,16 @@
           Link="resources\multiplayer_emerald.bps.gz">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="$(SolutionDir)third_party\gen3-poke-multiplayer\mgba\inject.local-server.lua"
+          Condition="Exists('$(SolutionDir)third_party\gen3-poke-multiplayer\mgba\inject.local-server.lua')"
+          Link="resources\multiplayer\inject.local-server.lua">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="$(SolutionDir)third_party\gen3-poke-multiplayer\mgba\inject.local-client.lua"
+          Condition="Exists('$(SolutionDir)third_party\gen3-poke-multiplayer\mgba\inject.local-client.lua')"
+          Link="resources\multiplayer\inject.local-client.lua">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />

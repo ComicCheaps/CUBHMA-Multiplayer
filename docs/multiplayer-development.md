@@ -1,47 +1,79 @@
-# Emerald multiplayer development notes
+# Emerald multiplayer development
 
-## Fixed compatibility target
+This branch targets local cooperative overworld multiplayer for the original English Pokémon Emerald v1.0 ROM, using CUBHMA as the ROM patching interface.
 
-This patch workflow accepts only clean retail English Pokémon Emerald v1.0:
-- File size: 16 MiB (0x1000000 bytes)
-- Game code at 0xAC: BPEE
+The game-side runtime comes from the public gen3-poke-multiplayer project, pinned as a GPL-3.0 submodule. The integration glue, local payload packager, and CUBHMA patcher remain separate. Keep the third-party source and license when redistributing derivative payload builds.
+
+## Compatibility target
+
+- Clean English Pokémon Emerald v1.0 only
+- File size: 16 MiB (0x1000000)
+- Game code at offset 0xAC: BPEE
 - SHA-1: f3ae088181bf583e55daf962a92bb46f4f1d07b7
 
-The ROM is supplied locally by the user. Never commit or upload ROM files or built game images.
+Use your own legally obtained clean ROM as the decompilation's baserom.gba. Never upload it, commit it, or share a pre-patched ROM image.
 
-## Patch generation
+## Build workflow
 
-1. Set up the original decompilation using the upstream pret/pokeemerald build instructions.
-2. Use your own clean English Emerald v1.0 ROM as that build's base ROM.
-3. Implement and test the game-side multiplayer changes in the decompilation.
-4. Compile the modified game ROM locally.
-5. Run this from the CUBHMA repository root:
+1. Initialise the payload submodule:
 
-   python tools/build_multiplayer_patch.py C:/path/to/clean_emerald.gba C:/path/to/built_pokeemerald.gba
+~~~powershell
+git submodule update --init --recursive
+~~~
 
-The utility checks the source fingerprint and target game code, creates a BPS1 patch, reapplies it in memory, and verifies that the output exactly matches the compiled target. It writes deterministic gzip output to:
+2. Set up pret/pokeemerald following its official build instructions, with your own clean English Emerald v1.0 baserom.gba. Run from the CUBHMA repository:
 
-   src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz
+~~~powershell
+python tools/integrate_pokeemerald.py --pokeemerald "C:/src/pokeemerald"
+~~~
 
-The WPF project automatically packages that optional file as resources/multiplayer_emerald.bps.gz. The generated file is intentionally ignored by Git so a locally produced ROM patch is not accidentally committed. The patcher tool will report that the game-side patch is missing until that file exists.
+The installer backs up src/main.c, adds one loader source file and a call during AgbMain startup, refuses partial/ambiguous states, and supports --revert. The loader does nothing while descriptor markers remain unpatched.
 
-A different region, copier-header ROM, edited source ROM, wrong checksum, or wrong game code is rejected.
+3. Build the modified decompilation by its usual process (normally WSL/Linux with the GBA toolchain):
 
-## Game-side milestones
+~~~bash
+make -j"$(nproc)"
+~~~
 
-The CUBHMA tool only transports an already-built patch; it does not create multiplayer behavior. The game-side work remains the main task.
+This intentionally modified build is not expected to pass the original ROM's byte-for-byte comparison. The modified build's map must match the loader-integrated sources.
 
-1. Transport smoke test: connect two Emerald instances in the intended GBA link-cable emulator mode.
-2. Overworld session: keep the link session alive outside the original Cable Club flow and handle disconnect/reconnect.
-3. Player replication: show remote trainer object events and synchronize map identity, coordinates, facing, movement, and animations.
-4. Transitions: resynchronize safely after doors, warps, map changes, menus, battles, and save/load.
-5. Interactions: define NPC scripts, item pickups, trainer battles, and event handling. Start with independent story progression for each player.
-6. Qualification: build from the exact clean ROM above, round-trip the patch, test application in CUBHMA, and test two connected emulator instances before shipping.
+4. Generate function symbols and build a local server and client script from the pinned payload project:
 
-Vanilla Emerald already contains code for link-room players and exchanging their key input, but that alone does not enable free-roaming co-op. Extending link sessions and player replication to normal overworld maps is the substantive game-side task. Quetzal is a behavioral reference, not code included in this project.
+~~~powershell
+python ./third_party/gen3-poke-multiplayer/tools/gen_syms.py "C:/src/pokeemerald/pokeemerald.map"
+Push-Location ./third_party/gen3-poke-multiplayer
+./build.ps1 -LinkRole server -LinkHost 127.0.0.1 -LinkPort 8765 -OutName local-server
+./build.ps1 -LinkRole client -LinkHost 127.0.0.1 -LinkPort 8765 -OutName local-client
+Pop-Location
+~~~
 
-## Local tests
+These generate payload.bin, payload.map and two Lua scripts under the submodule. They are local build outputs, not committed files.
 
-Run: python -m unittest discover -s tools/tests -v
+5. Embed payload.bin into the modified target ROM, then generate a BPS patch against the clean ROM:
 
-The tests use short synthetic byte sequences; they do not require a real ROM.
+~~~powershell
+python tools/package_multiplayer_payload.py "C:/src/pokeemerald/pokeemerald.gba" "./third_party/gen3-poke-multiplayer/build/payload.bin" "./third_party/gen3-poke-multiplayer/build/payload.map" "./build/pokeemerald-multiplayer-embedded.gba"
+python tools/build_multiplayer_patch.py "C:/path/to/your-clean-emerald.gba" "./build/pokeemerald-multiplayer-embedded.gba" --output "./src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz"
+~~~
+
+The packager validates the payload HOOK header, linker-map end symbol, reserved EWRAM space, descriptor uniqueness, and game code. The BPS tool verifies the clean ROM fingerprint and round-trips the generated patch byte-for-byte. Generated ROM/payload files are git-ignored.
+
+6. Build CUBHMA:
+
+~~~powershell
+dotnet build HexManiacAdvance.sln -c Release -p:PlatformTarget=x64
+~~~
+
+Open your clean ROM and run Utilities → Misc → Apply Emerald Multiplayer. Use File → Save As to keep the original file. The CUBHMA build optionally packages the generated server and client scripts under resources/multiplayer.
+
+7. For the first local test, open the patched output in two mGBA instances, enter the overworld, load inject.local-server.lua in the first and inject.local-client.lua in the second, and confirm both trainers can see each other moving. Then test a route transition. This workflow is local server/client link mode; it does not imply online Internet matchmaking.
+
+## Tests and release status
+
+Run the Python packaging tests without a ROM:
+
+~~~powershell
+python -m unittest discover -s tools/tests -v
+~~~
+
+CI also builds CUBHMA and runs its unit-test project. The real Emerald build, actual payload fit, two-instance multiplayer session, map transitions and clean-ROM BPS output still need to be tested locally before this feature is release-ready.

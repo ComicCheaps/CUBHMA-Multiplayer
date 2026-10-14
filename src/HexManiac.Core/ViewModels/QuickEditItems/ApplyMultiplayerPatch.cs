@@ -27,9 +27,11 @@ namespace HavenSoft.HexManiac.Core.ViewModels.QuickEditItems {
 
       public string Name => "Apply Emerald Multiplayer";
 
-      public string Description => @"Adds the local multiplayer-enabled Emerald build by applying a bundled BPS patch.
-      
+      public string Description => @"Applies the local multiplayer-enabled Emerald patch to the ROM open in this tab.
+
 Requires an unmodified Pokemon Emerald (USA, Europe) v1.0 ROM (BPEE, 16 MB). The patch is built for that exact ROM; edited, expanded, already-patched, or different-region ROMs are not accepted.
+
+For multiplayer sessions in mGBA, each player also needs a matching generated link script. CUBHMA packages these when available as resources\multiplayer\inject.local-server.lua and resources\multiplayer\inject.local-client.lua. Open the patched ROM in two mGBA instances, enter the overworld, then load the server script in the first instance and the client script in the second.
 
 Applying the patch replaces the contents of this tab but does not write to disk immediately. Use File > Save As to keep your original ROM untouched. Close the changed tab without saving to return to the original.
 
