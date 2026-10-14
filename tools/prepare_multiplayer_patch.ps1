@@ -27,6 +27,7 @@ $payloadMap = Join-Path $submoduleRoot "build\payload.map"
 $symbolsScript = Join-Path $submoduleRoot "tools\gen_syms.py"
 $packageScript = Join-Path $repoRoot "tools\package_multiplayer_payload.py"
 $patchScript = Join-Path $repoRoot "tools\build_multiplayer_patch.py"
+$configureLuaScript = Join-Path $repoRoot "tools\configure_multiplayer_lua.py"
 $embeddedRom = if ([string]::IsNullOrWhiteSpace($OutputRom)) {
     Join-Path $repoRoot "build\pokeemerald-multiplayer-embedded.gba"
 } else {
@@ -34,7 +35,7 @@ $embeddedRom = if ([string]::IsNullOrWhiteSpace($OutputRom)) {
 }
 $bpsOutput = Join-Path $repoRoot "src\HexManiac.Core\ViewModels/QuickEditItems/multiplayer_emerald.bps.gz"
 
-foreach ($required in @($builtRom, $mapPath, $cleanRom, $symbolsScript, $packageScript, $patchScript)) {
+foreach ($required in @($builtRom, $mapPath, $cleanRom, $symbolsScript, $packageScript, $patchScript, $configureLuaScript)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required input file not found: $required"
     }
@@ -64,6 +65,10 @@ foreach ($required in @($payloadBin, $payloadMap, (Join-Path $submoduleRoot "mgb
         throw "Expected build output not found: $required"
     }
 }
+
+Write-Output "Step 2b/4: Configure each Lua script for the modified ROM address map..."
+& $python $configureLuaScript --rom $builtRom --map $mapPath --script (Join-Path $submoduleRoot "mgba\inject.p1.lua") --script (Join-Path $submoduleRoot "mgba\inject.p2.lua")
+if ($LASTEXITCODE -ne 0) { throw "Lua ROM fingerprint configuration failed (exit $LASTEXITCODE)." }
 
 Write-Output "Step 3/4: Embed the payload into the locally built Emerald ROM..."
 & $python $packageScript $builtRom $payloadBin $payloadMap $embeddedRom
