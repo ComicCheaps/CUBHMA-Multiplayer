@@ -236,9 +236,10 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
             var td = model[start + Offset_TeraDynamax];
             var tera = td & 31; var gmax = (td >> 5) & 1; var dmax = (td >> 6) & 1;
             if (tera != 0) extras.Add($"tera={NameOf(types, tera)}");
+            var dmaxLevel = model[start + Offset_DynamaxLevel] & 15;
             if (gmax != 0) extras.Add("gmax=yes");
             if (dmax != 0) extras.Add("dynamax=yes");
-            var dmaxLevel = model[start + Offset_DynamaxLevel] & 15;
+            else if (gmax != 0 || dmaxLevel != DynamaxLevel_Default) extras.Add("dynamax=no"); // gmax= and dmaxlevel= alone mean 'dynamax=yes' (like trainerproc)
             if (dmaxLevel != DynamaxLevel_Default) extras.Add($"dmaxlevel={dmaxLevel}");
             var tags = model.ReadMultiByteValue(start + Offset_Tags, 4);
             if (tags != 0) extras.Add($"tags={tags:X}");
@@ -271,8 +272,13 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
          var natures = Names(NatureList);
          var types = Names(TypesTable);
 
-         // step 1: parse into per-pokemon records (bytes start as the existing record, or a copy of the last one, so unmentioned fields are kept)
+         // step 1: parse into per-pokemon records.
+         // The bytes start as the existing record (or a copy of the last one), so the nickname and EV pointers are kept,
+         // but every field of the '*' line starts at its default: the text always shows all of them that differ from the default,
+         // so a key that is not in the text (any more) means the default. Otherwise deleting '* tera=Fire' would keep the Tera type,
+         // and a new Pokemon would silently inherit the Tera type / Dynamax of the Pokemon it was copied from.
          var records = new List<byte[]>();
+         var evsWritten = new List<bool>();
          byte[] current = null;
          int moveIndex = 0;
          foreach (var line in lines) {
@@ -285,13 +291,15 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                moveIndex++;
             } else if (line.StartsWith("*")) {
                if (current == null) continue;
-               ApplyExtras(current, line.Substring(1), items, abilities, natures, types, token);
+               if (ApplyExtras(current, line.Substring(1), items, abilities, natures, types, token)) evsWritten[evsWritten.Count - 1] = true;
             } else {
                if (records.Count >= MaxTeamSize) continue;
                var tokens = line.Split(' ', 2);
                if (tokens.Length < 2 || !int.TryParse(tokens[0], out var level)) continue;
                current = TemplateFor(records.Count);
+               ResetExtras(current);
                records.Add(current);
+               evsWritten.Add(false);
                moveIndex = 0;
                for (int j = 0; j < 4; j++) WriteValue(current, Offset_Moves + j * 2, 2, 0);
                current[Offset_Level] = (byte)level.LimitToRange(0, 255);
@@ -312,6 +320,9 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                var speciesName = ivSplit[0].Trim().Trim('"');
                WriteValue(current, Offset_Species, 2, FindOption(species, speciesName));
             }
+         }
+         for (int i = 0; i < records.Count; i++) {
+            if (!evsWritten[i]) WriteValue(records[i], Offset_Evs, 4, 0); // no 'evs=' in the text: no EVs
          }
          if (records.Count == 0) records.Add(TemplateFor(0));
          if (setDefaultMoves || setDefaultItems) {
@@ -540,10 +551,31 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
          for (int i = 0; i < width; i++) bytes[offset + i] = (byte)(value >> (8 * i));
       }
 
-      private void ApplyExtras(byte[] record, string text, IReadOnlyList<string> items, IReadOnlyList<string> abilities, IReadOnlyList<string> natures, IReadOnlyList<string> types, ModelDelta token) {
-         foreach (var (key, value) in ParseKeyValues(text)) {
-            var v = value.Trim('"');
-            switch (key.ToLower()) {
+      /// <summary>
+      /// Sets every field that the '*' line can change to its default (the value that SerializeRun doesn't write).
+      /// The pointers (nickname, EVs) and the padding bits are kept.
+      /// </summary>
+      private static void ResetExtras(byte[] record) {
+         WriteValue(record, Offset_Ability, 2, 0);
+         record[Offset_Ball] = Ball_Default;
+         record[Offset_Friendship] = 0;
+         record[Offset_NatureGenderShiny] = Gender_Default << 5;
+         record[Offset_TeraDynamax] = (byte)(record[Offset_TeraDynamax] & 0x80);
+         record[Offset_DynamaxLevel] = (byte)((record[Offset_DynamaxLevel] & 0xF0) | DynamaxLevel_Default);
+         WriteValue(record, Offset_Tags, 4, 0);
+      }
+
+      /// <summary>
+      /// Applies one '*' line. Returns true if the line had an 'evs=' key.
+      /// Like the expansion's trainerproc ('Gigantamax: Yes' / 'Dynamax Level: n' set shouldUseDynamax), gmax=yes and dmaxlevel=n
+      /// also mean dynamax=yes, unless the line says dynamax=no.
+      /// </summary>
+      private bool ApplyExtras(byte[] record, string text, IReadOnlyList<string> items, IReadOnlyList<string> abilities, IReadOnlyList<string> natures, IReadOnlyList<string> types, ModelDelta token) {
+         bool hasEvs = false, impliesDynamax = false;
+         bool? dynamax = null;
+         foreach (var pair in ParseKeyValues(text)) {
+            var v = pair.Value.Trim().Trim('"');
+            switch (CanonicalKey(pair.Key)) {
                case "ability": WriteValue(record, Offset_Ability, 2, FindOption(abilities, v)); break;
                case "nature": {
                      var n = FindOption(natures, v);
@@ -551,12 +583,14 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                      break;
                   }
                case "gender": {
-                     var g = v.ToLower() switch { "male" or "m" => 1, "female" or "f" => 2, "random" or "any" => 3, _ => int.TryParse(v, out var gv) ? gv : 3 };
+                     var g = ParseGender(v);
+                     if (g < 0) break;
                      record[Offset_NatureGenderShiny] = (byte)((record[Offset_NatureGenderShiny] & ~(3 << 5)) | ((g & 3) << 5));
                      break;
                   }
                case "shiny": {
-                     var s = IsYes(v) ? 1 : 0;
+                     var s = ParseBool(v);
+                     if (s < 0) break;
                      record[Offset_NatureGenderShiny] = (byte)((record[Offset_NatureGenderShiny] & 0x7F) | (s << 7));
                      break;
                   }
@@ -567,15 +601,32 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                   }
                case "friendship": if (int.TryParse(v, out var f)) record[Offset_Friendship] = (byte)f.LimitToRange(0, 255); break;
                case "tera": {
-                     var t = int.TryParse(v, out var tv) ? tv : FindOption(types, v);
+                     var t = ParseType(types, v);
+                     if (t < 0) break; // unknown type: the text editor marks it, nothing is written
                      record[Offset_TeraDynamax] = (byte)((record[Offset_TeraDynamax] & ~31) | (t & 31));
                      break;
                   }
-               case "gmax": record[Offset_TeraDynamax] = (byte)((record[Offset_TeraDynamax] & ~(1 << 5)) | ((IsYes(v) ? 1 : 0) << 5)); break;
-               case "dynamax": record[Offset_TeraDynamax] = (byte)((record[Offset_TeraDynamax] & ~(1 << 6)) | ((IsYes(v) ? 1 : 0) << 6)); break;
-               case "dmaxlevel": if (int.TryParse(v, out var dl)) record[Offset_DynamaxLevel] = (byte)((record[Offset_DynamaxLevel] & 0xF0) | (dl & 15)); break;
+               case "gmax": {
+                     var g = ParseBool(v);
+                     if (g < 0) break;
+                     record[Offset_TeraDynamax] = (byte)((record[Offset_TeraDynamax] & ~(1 << 5)) | (g << 5));
+                     if (g == 1) impliesDynamax = true;
+                     break;
+                  }
+               case "dynamax": {
+                     var d = ParseBool(v);
+                     if (d >= 0) dynamax = d == 1;
+                     break;
+                  }
+               case "dmaxlevel": {
+                     if (!int.TryParse(v, out var dl) || !dl.InRange(0, 11)) break;
+                     record[Offset_DynamaxLevel] = (byte)((record[Offset_DynamaxLevel] & 0xF0) | dl);
+                     impliesDynamax = true;
+                     break;
+                  }
                case "tags": if (int.TryParse(v, System.Globalization.NumberStyles.HexNumber, null, out var tags)) WriteValue(record, Offset_Tags, 4, tags); break;
                case "evs": {
+                     hasEvs = true;
                      var parts = v.Split('/');
                      var evs = new int[6];
                      for (int k = 0; k < 6 && k < parts.Length; k++) int.TryParse(parts[k], out evs[k]);
@@ -592,40 +643,167 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                case "nickname": break; // the nickname pointer is kept as-is; edit the text itself in the table tool
             }
          }
+         var useDynamax = dynamax ?? (impliesDynamax ? true : (bool?)null);
+         if (useDynamax.HasValue) record[Offset_TeraDynamax] = (byte)((record[Offset_TeraDynamax] & ~(1 << 6)) | ((useDynamax.Value ? 1 : 0) << 6));
+         return hasEvs;
       }
 
-      private static bool IsYes(string v) => v.ToLower() is "yes" or "true" or "1" or "y";
+      private static bool IsYes(string v) => ParseBool(v) == 1;
 
-      private static IEnumerable<(string, string)> ParseKeyValues(string text) {
-         // key=value key="value with spaces" key=value with spaces (words without '=' continue the previous value)
-         var pairs = new List<(string key, string value)>();
-         var i = 0;
+      /// <summary>1 for yes, 0 for no, -1 if it's neither.</summary>
+      internal static int ParseBool(string v) => v.Trim().Trim('"').ToLowerInvariant() switch {
+         "yes" or "true" or "1" or "y" or "on" => 1,
+         "no" or "false" or "0" or "n" or "off" => 0,
+         _ => -1,
+      };
+
+      /// <summary>1 male, 2 female, 3 random, -1 if unknown.</summary>
+      internal static int ParseGender(string v) => v.Trim().Trim('"').ToLowerInvariant() switch {
+         "male" or "m" or "1" => 1,
+         "female" or "f" or "2" => 2,
+         "random" or "any" or "3" or "default" => 3,
+         "0" => 0,
+         _ => -1,
+      };
+
+      /// <summary>
+      /// A type by name ('Fire', 'fire', 'TYPE_FIRE', '"Fire"'), by the beginning of its name ('Fir'), or by number.
+      /// 'none' / 'no' / '-' clear it. Returns -1 when nothing matches (a partial match anywhere in a name would pick a random type).
+      /// </summary>
+      internal static int ParseType(IReadOnlyList<string> types, string text) {
+         text = text.Trim().Trim('"').Trim();
+         if (text.StartsWith("TYPE_", StringComparison.OrdinalIgnoreCase)) text = text.Substring(5);
+         text = text.Replace('_', ' ');
+         if (int.TryParse(text, out var number)) return number.InRange(0, 32) ? number : -1;
+         if (text.ToLowerInvariant() is "" or "none" or "no" or "-" or "0") return 0;
+         if (types == null) return -1;
+         for (int i = 0; i < types.Count; i++) if (string.Equals(types[i]?.Trim('"'), text, StringComparison.OrdinalIgnoreCase)) return i < 32 ? i : -1;
+         if (text.Length >= 2) {
+            for (int i = 0; i < types.Count && i < 32; i++) if (types[i] != null && types[i].Trim('"').StartsWith(text, StringComparison.OrdinalIgnoreCase)) return i;
+         }
+         return -1;
+      }
+
+      /// <summary>
+      /// The key of a '*' line field, in its canonical spelling, or null if it isn't one.
+      /// Spaces, '_' and '-' and capital letters don't matter, and the Showdown / .party names are accepted too ('Tera Type', 'Gigantamax', 'Dynamax Level').
+      /// </summary>
+      internal static string CanonicalKey(string key) {
+         var k = new string((key ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+         return k switch {
+            "ability" => "ability",
+            "nature" => "nature",
+            "gender" => "gender",
+            "shiny" or "isshiny" => "shiny",
+            "ball" or "pokeball" => "ball",
+            "friendship" or "happiness" => "friendship",
+            "tera" or "teratype" => "tera",
+            "gmax" or "gigantamax" or "gigantamaxfactor" => "gmax",
+            "dynamax" or "dmax" or "shouldusedynamax" or "shoulddynamax" => "dynamax",
+            "dmaxlevel" or "dynamaxlevel" or "dmaxlvl" => "dmaxlevel",
+            "tags" => "tags",
+            "evs" or "ev" => "evs",
+            "nickname" or "nick" => "nickname",
+            _ => null,
+         };
+      }
+
+      internal record ExtraField(string Key, string Value, int Start, int Length);
+
+      /// <summary>
+      /// key=value key="value with spaces" key=value with spaces (words without '=' continue the previous value).
+      /// 'key = value' and 'key: value' work too, and so do the two-word keys 'Tera Type' and 'Dynamax Level'.
+      /// A word on its own at the start of the line, or after a value that doesn't take more words, is 'word=yes' ('* dynamax gmax').
+      /// Start/Length cover the whole 'key=value' text (for the error marks of the text editor).
+      /// </summary>
+      internal static IReadOnlyList<ExtraField> ParseKeyValues(string text) {
+         var tokens = new List<(string word, int start, int end, bool separator)>();
+         int i = 0;
          while (i < text.Length) {
-            while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-            var keyStart = i;
-            while (i < text.Length && text[i] != '=' && !char.IsWhiteSpace(text[i])) i++;
-            var key = text.Substring(keyStart, i - keyStart);
-            if (i >= text.Length || text[i] != '=') {
-               if (key.Length == 0) continue;
-               if (pairs.Count > 0) pairs[pairs.Count - 1] = (pairs[pairs.Count - 1].key, pairs[pairs.Count - 1].value + " " + key);
-               else pairs.Add((key, "yes"));
-               continue;
-            }
-            i++; // '='
-            string value;
-            if (i < text.Length && text[i] == '"') {
-               var end = text.IndexOf('"', i + 1);
-               if (end == -1) end = text.Length;
-               value = text.Substring(i + 1, end - i - 1);
-               i = end + 1;
+            while (i < text.Length && (char.IsWhiteSpace(text[i]) || text[i] == ',' || text[i] == ';')) i++;
+            if (i >= text.Length) break;
+            var start = i;
+            string word;
+            if (text[i] == '"') {
+               var close = text.IndexOf('"', i + 1);
+               if (close == -1) close = text.Length;
+               word = text.Substring(start, Math.Min(close + 1, text.Length) - start);
+               i = Math.Min(close + 1, text.Length);
             } else {
-               var valueStart = i;
-               while (i < text.Length && !char.IsWhiteSpace(text[i])) i++;
-               value = text.Substring(valueStart, i - valueStart);
+               while (i < text.Length && !char.IsWhiteSpace(text[i]) && text[i] != '=' && text[i] != ':' && text[i] != ',' && text[i] != ';') i++;
+               word = text.Substring(start, i - start);
             }
-            if (key.Length > 0) pairs.Add((key, value));
+            var end = i;
+            var j = i;
+            while (j < text.Length && text[j] == ' ') j++;
+            var separator = j < text.Length && (text[j] == '=' || text[j] == ':');
+            if (separator) i = j + 1;
+            if (word.Length == 0 && !separator) { i++; continue; }
+            tokens.Add((word, start, separator ? i : end, separator));
+         }
+
+         var pairs = new List<ExtraField>();
+         var continued = new List<bool>(); // for each pair: whether bare words were added to its value
+         for (int t = 0; t < tokens.Count; t++) {
+            var (word, start, end, separator) = tokens[t];
+            if (separator) {
+               var key = word;
+               // two-word keys: 'Tera Type:' / 'Dynamax Level ='
+               if (t > 0 && !tokens[t - 1].separator && CanonicalKey(key) == null && CanonicalKey(tokens[t - 1].word + key) != null && pairs.Count > 0) {
+                  var previous = tokens[t - 1];
+                  var last = pairs[pairs.Count - 1];
+                  if (last.Key == previous.word && last.Start == previous.start) {
+                     pairs.RemoveAt(pairs.Count - 1); continued.RemoveAt(continued.Count - 1);
+                  } else if (last.Value.EndsWith(" " + previous.word)) {
+                     pairs[pairs.Count - 1] = last with { Value = last.Value.Substring(0, last.Value.Length - previous.word.Length - 1), Length = previous.start - last.Start };
+                  }
+                  key = previous.word + " " + key;
+                  start = previous.start;
+               }
+               var value = string.Empty;
+               if (t + 1 < tokens.Count && !tokens[t + 1].separator) {
+                  t++;
+                  value = tokens[t].word;
+                  end = tokens[t].end;
+               }
+               pairs.Add(new(key, value, start, end - start));
+               continued.Add(false);
+            } else if (pairs.Count > 0 && TakesMoreWords(pairs[pairs.Count - 1])) {
+               var last = pairs[pairs.Count - 1];
+               pairs[pairs.Count - 1] = last with { Value = last.Value + " " + word, Length = end - last.Start };
+               continued[continued.Count - 1] = true;
+            } else {
+               pairs.Add(new(word, "yes", start, end - start));
+               continued.Add(false);
+            }
          }
          return pairs;
+      }
+
+      /// <summary>Only names can have spaces without quotes: 'ability=Rock Head', 'ball=Great Ball', 'nature=...'. A number, yes/no, a type or EVs can't.</summary>
+      private static bool TakesMoreWords(ExtraField pair) {
+         if (pair.Value.StartsWith("\"")) return false;
+         return CanonicalKey(pair.Key) is "ability" or "ball" or "nature" or "nickname" or null;
+      }
+
+      /// <summary>
+      /// Problems in a '*' line: unknown keys, and values that can't be used (they would be ignored). Positions are relative to the text after the '*'.
+      /// </summary>
+      internal static IEnumerable<ExtraField> FindExtraErrors(string text, IReadOnlyList<string> types) {
+         foreach (var pair in ParseKeyValues(text)) {
+            var v = pair.Value.Trim().Trim('"');
+            var ok = CanonicalKey(pair.Key) switch {
+               null => false,
+               "tera" => ParseType(types, v) >= 0,
+               "shiny" or "gmax" or "dynamax" => ParseBool(v) >= 0,
+               "gender" => ParseGender(v) >= 0,
+               "dmaxlevel" => int.TryParse(v, out var dl) && dl.InRange(0, 11),
+               "friendship" => int.TryParse(v, out _),
+               "tags" => int.TryParse(v, System.Globalization.NumberStyles.HexNumber, null, out _),
+               _ => true,
+            };
+            if (!ok) yield return pair;
+         }
       }
 
       public bool DependsOn(string anchorName) => anchorName == SpeciesTable || anchorName == MovesTable || anchorName == HardcodeTablesModel.ItemsTableName || anchorName == HardcodeTablesModel.AbilityNamesTable;
@@ -690,14 +868,41 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
 
       public ITextPreProcessor PreFormatter => new ExpansionTrainerTextFormatter(model);
 
+      /// <summary>
+      /// The error marks for a trainer team text box that isn't tied to one run (the map editor's trainer panel):
+      /// the expansion's when the trainer table's teams are 'tpte' runs, otherwise vanilla HMA's (level / move legality).
+      /// </summary>
+      public static ITextPreProcessor TeamFormatterFor(IDataModel model) {
+         var trainers = model.GetTable(HardcodeTablesModel.TrainerTableName);
+         if (trainers != null && trainers.ElementContent.Any(segment => segment is ArrayRunPointerSegment pointer && pointer.InnerFormat == SharedFormatString)) {
+            return new ExpansionTrainerTextFormatter(model);
+         }
+         return new TrainerTextFormatter(model);
+      }
+
       #endregion
    }
 
    /// <summary>
    /// The expansion team text has no level-up / move legality checks (the expansion's learnsets live inside the species struct).
+   /// It marks what in a '*' line can't be used (unknown keys like 'tera type=', unknown types, 'dynamax=maybe'), because those are ignored when the team is written.
    /// </summary>
    public record ExpansionTrainerTextFormatter(IDataModel Model) : ITextPreProcessor {
       public TextFormatting[] Format(string content) => new TextFormatting[0];
-      public IEnumerable<TextSegment> FindErrors(string content) => new List<TextSegment>();
+      public IEnumerable<TextSegment> FindErrors(string content) {
+         var errors = new List<TextSegment>();
+         if (string.IsNullOrEmpty(content)) return errors;
+         IReadOnlyList<string> types = null;
+         var lines = content.SplitLines();
+         for (int i = 0; i < lines.Length; i++) {
+            var star = lines[i].IndexOf('*');
+            if (star < 0 || lines[i].Substring(0, star).Trim().Length > 0) continue;
+            types ??= ModelCacheScope.GetCache(Model).GetOptions(ExpansionTrainerTeamRun.TypesTable);
+            foreach (var error in ExpansionTrainerTeamRun.FindExtraErrors(lines[i].Substring(star + 1), types)) {
+               errors.Add(new(i, star + 1 + error.Start, Math.Max(1, error.Length), SegmentType.Error));
+            }
+         }
+         return errors;
+      }
    }
 }

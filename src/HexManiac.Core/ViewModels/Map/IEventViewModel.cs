@@ -1041,7 +1041,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels.Map {
       public TextEditorViewModel TrainerContent {
          get {
             if (trainerContentEditor == null) {
-               trainerContentEditor = new TextEditorViewModel { PreFormatter = new TrainerTextFormatter(element.Model) };
+               trainerContentEditor = new TextEditorViewModel { PreFormatter = ExpansionTrainerTeamRun.TeamFormatterFor(element.Model) };
                RefreshTrainerContentEditor();
                trainerContentEditor.Bind(nameof(TextEditorViewModel.Content), (sender, e) => {
                   if (updatingTrainerContentEditor) return;
@@ -2465,7 +2465,7 @@ show:
       public TrainerTeamViewModel(IDataModel model, int trainerID, Func<ModelDelta> tokenGenerator) {
          (this.model, this.trainerID) = (model, trainerID);
          this.tokenGenerator = tokenGenerator;
-         TrainerContent.PreFormatter = new TrainerTextFormatter(model);
+         TrainerContent.PreFormatter = ExpansionTrainerTeamRun.TeamFormatterFor(model);
          TrainerContent.Content = TrainerTeam;
          TrainerContent.Bind(nameof(TextEditorViewModel.Content), (sender, e) => TrainerTeam = sender.Content);
       }
