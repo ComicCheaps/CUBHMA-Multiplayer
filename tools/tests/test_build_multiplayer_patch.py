@@ -24,7 +24,7 @@ class BpsBuilderTests(unittest.TestCase):
         source = bytes(range(256)) * 8
         target = bytearray(source)
         target[17:21] = b"PLAY"
-        target[400:417] = b"multiplayer-feature"
+        target[400:419] = b"multiplayer-feature"
         target[-3:] = b"END"
         target = bytes(target)
         patch = build_bps_patch(source, target)
