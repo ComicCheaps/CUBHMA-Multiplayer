@@ -8,6 +8,8 @@ from package_multiplayer_payload import (  # noqa: E402
     DESCRIPTOR_MARKERS,
     HOOK_MAGIC,
     PAYLOAD_BASE,
+    ROM_BASE,
+    ROM_END,
     package_payload,
     parse_payload_end,
 )
@@ -48,6 +50,16 @@ class PackagePayloadTests(unittest.TestCase):
         self.assertEqual(payload, result[payload_offset:payload_offset + len(payload)])
         expected = (-(sum(result[0xA0:0xBD]) + 0x19)) & 0xFF
         self.assertEqual(expected, result[0xBD])
+
+    def test_default_output_is_full_32_mib_rom_window(self):
+        source = fake_rom(size=0x1000000)
+        result = package_payload(source, fake_payload(), "0x0203D080 payload_end = .")
+        payload_offset = 0x1000000
+        address, size, _ = struct.unpack_from("<III", result, 0x1000)
+        self.assertEqual(ROM_END - ROM_BASE, len(result))
+        self.assertEqual(0x09000000, address)
+        self.assertEqual(32, size)
+        self.assertEqual(b"\xFF" * 16, result[-16:])
 
     def test_rejects_output_size_that_cannot_fit_payload(self):
         with self.assertRaisesRegex(ValueError, "Output ROM size"):
