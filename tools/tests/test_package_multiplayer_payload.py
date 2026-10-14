@@ -76,6 +76,12 @@ class PackagePayloadTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "too large"):
             package_payload(fake_rom(), fake_payload(), "0x02040000 payload_end = .")
 
+    def test_rom_loader_leaves_irq_vector_for_mgba_injection(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        loader = (repo_root / "game-side" / "pokeemerald-multiplayer-loader.c").read_text(encoding="utf-8")
+        self.assertIn("payloadHeader[1] = oldIrqVector;", loader)
+        self.assertNotIn("*CUBHMA_IRQ_VECTOR = CUBHMA_PAYLOAD_EWRAM_BASE;", loader)
+
     def test_rejects_ambiguous_payload_end(self):
         with self.assertRaisesRegex(ValueError, "unique payload_end"):
             parse_payload_end("0x0203D080 payload_end = .\n0x0203D090 payload_end = .\n")

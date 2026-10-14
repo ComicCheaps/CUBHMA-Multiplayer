@@ -59,5 +59,13 @@ void CUBHMAMultiplayerPayloadInit(void)
         return;
 
     payloadHeader[1] = oldIrqVector;
-    *CUBHMA_IRQ_VECTOR = CUBHMA_PAYLOAD_EWRAM_BASE;
+
+    /*
+     * Leave the live IRQ vector alone at boot. The mGBA client script detects
+     * whether it has injected the payload by checking that vector; if it were
+     * already pointing into this payload, the script would skip startup and
+     * never establish the local network bridge. The script will overwrite
+     * this reserved EWRAM region and install the hook after entering the
+     * overworld.
+     */
 }

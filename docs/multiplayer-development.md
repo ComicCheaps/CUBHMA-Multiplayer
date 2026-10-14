@@ -29,7 +29,7 @@ Set up pret/pokeemerald following its official build instructions and use your o
 python tools/integrate_pokeemerald.py --pokeemerald "C:/src/pokeemerald"
 ~~~
 
-The installer backs up src/main.c, adds one loader source file and a call during AgbMain startup, refuses partial/ambiguous states, and supports --revert. The loader does nothing while descriptor marker values remain unpatched.
+The installer backs up src/main.c, adds one loader source file and a call during AgbMain startup, refuses partial/ambiguous states, and supports --revert. With a valid descriptor the loader copies the payload into reserved EWRAM but deliberately leaves the live IRQ vector untouched; the generated mGBA script must install the hook and start the networking bridge after the game reaches the overworld.
 
 3. Build the modified decompilation using pret/pokeemerald's usual build process (normally WSL/Linux with the GBA toolchain):
 
