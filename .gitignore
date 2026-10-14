@@ -27,5 +27,5 @@ src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz
 # Locally generated ROM and payload build artifacts (never commit game images).
 build/pokeemerald-multiplayer-embedded.gba
 third_party/gen3-poke-multiplayer/build/
-third_party/gen3-poke-multiplayer/mgba/inject.local-server.lua
-third_party/gen3-poke-multiplayer/mgba/inject.local-client.lua
+third_party/gen3-poke-multiplayer/mgba/inject.p1.lua
+third_party/gen3-poke-multiplayer/mgba/inject.p2.lua

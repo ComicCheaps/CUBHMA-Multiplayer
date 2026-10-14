@@ -31,7 +31,7 @@ namespace HavenSoft.HexManiac.Core.ViewModels.QuickEditItems {
 
 Requires an unmodified Pokemon Emerald (USA, Europe) v1.0 ROM (BPEE, 16 MB). The patch is built for that exact ROM; edited, expanded, already-patched, or different-region ROMs are not accepted.
 
-For multiplayer sessions in mGBA, each player also needs a matching generated link script. CUBHMA packages these when available as resources\multiplayer\inject.local-server.lua and resources\multiplayer\inject.local-client.lua. Open the patched ROM in two mGBA instances, enter the overworld, then load the server script in the first instance and the client script in the second.
+For local mGBA multiplayer, the project also needs its generated relay scripts and local Python relay/bridge. CUBHMA packages the player scripts when available as resources\multiplayer\inject.p1.lua and resources\multiplayer\inject.p2.lua. Open the patched ROM in two mGBA instances, start the submodule's local relay/bridge using net\run-local.ps1 -SkipBuild, enter the overworld, then load p1 in the first instance and p2 in the second.
 
 Applying the patch replaces the contents of this tab but does not write to disk immediately. Use File > Save As to keep your original ROM untouched. Close the changed tab without saving to return to the original.
 

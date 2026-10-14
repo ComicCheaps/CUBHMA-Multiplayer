@@ -21,15 +21,17 @@ Use your own legally obtained clean ROM as the decompilation's baserom.gba. Neve
 git submodule update --init --recursive
 ~~~
 
-2. Set up pret/pokeemerald following its official build instructions, with your own clean English Emerald v1.0 baserom.gba. Run from the CUBHMA repository:
+Set up pret/pokeemerald following its official build instructions and use your own clean English Emerald v1.0 ROM.
+
+2. Add the payload loader to your local decompilation:
 
 ~~~powershell
 python tools/integrate_pokeemerald.py --pokeemerald "C:/src/pokeemerald"
 ~~~
 
-The installer backs up src/main.c, adds one loader source file and a call during AgbMain startup, refuses partial/ambiguous states, and supports --revert. The loader does nothing while descriptor markers remain unpatched.
+The installer backs up src/main.c, adds one loader source file and a call during AgbMain startup, refuses partial/ambiguous states, and supports --revert. The loader does nothing while descriptor marker values remain unpatched.
 
-3. Build the modified decompilation by its usual process (normally WSL/Linux with the GBA toolchain):
+3. Build the modified decompilation using pret/pokeemerald's usual build process (normally WSL/Linux with the GBA toolchain):
 
 ~~~bash
 make -j"$(nproc)"
@@ -37,17 +39,17 @@ make -j"$(nproc)"
 
 This intentionally modified build is not expected to pass the original ROM's byte-for-byte comparison. The modified build's map must match the loader-integrated sources.
 
-4. Generate function symbols and build a local server and client script from the pinned payload project:
+4. Generate function symbols from the modified map and build the two local mGBA client scripts:
 
 ~~~powershell
 python ./third_party/gen3-poke-multiplayer/tools/gen_syms.py "C:/src/pokeemerald/pokeemerald.map"
 Push-Location ./third_party/gen3-poke-multiplayer
-./build.ps1 -LinkRole server -LinkHost 127.0.0.1 -LinkPort 8765 -OutName local-server
-./build.ps1 -LinkRole client -LinkHost 127.0.0.1 -LinkPort 8765 -OutName local-client
+./build.ps1 -LinkRole client -LinkPort 8201 -OutName p1 -Syms usa
+./build.ps1 -LinkRole client -LinkPort 8202 -OutName p2 -Syms usa
 Pop-Location
 ~~~
 
-These generate payload.bin, payload.map and two Lua scripts under the submodule. They are local build outputs, not committed files.
+These generate payload.bin, payload.map, inject.p1.lua and inject.p2.lua under the submodule. These scripts use two local TCP ports; the project's Python relay/bridge connects them together.
 
 5. Embed payload.bin into the modified target ROM, then generate a BPS patch against the clean ROM:
 
@@ -56,17 +58,24 @@ python tools/package_multiplayer_payload.py "C:/src/pokeemerald/pokeemerald.gba"
 python tools/build_multiplayer_patch.py "C:/path/to/your-clean-emerald.gba" "./build/pokeemerald-multiplayer-embedded.gba" --output "./src/HexManiac.Core/ViewModels/QuickEditItems/multiplayer_emerald.bps.gz"
 ~~~
 
-The packager validates the payload HOOK header, linker-map end symbol, reserved EWRAM space, descriptor uniqueness, and game code. The BPS tool verifies the clean ROM fingerprint and round-trips the generated patch byte-for-byte. Generated ROM/payload files are git-ignored.
+The packager validates the payload HOOK header, linker-map end symbol, reserved EWRAM space, descriptor uniqueness and game code. The BPS tool verifies the clean ROM fingerprint and round-trips the patch byte-for-byte. Generated ROM/payload files are git-ignored.
 
-6. Build CUBHMA:
+6. Build CUBHMA after the two scripts and patch exist:
 
 ~~~powershell
 dotnet build HexManiacAdvance.sln -c Release -p:PlatformTarget=x64
 ~~~
 
-Open your clean ROM and run Utilities → Misc → Apply Emerald Multiplayer. Use File → Save As to keep the original file. The CUBHMA build optionally packages the generated server and client scripts under resources/multiplayer.
+When present, CUBHMA packages the BPS patch plus resources/multiplayer/inject.p1.lua and inject.p2.lua. Open your clean ROM and run Utilities → Misc → Apply Emerald Multiplayer; use File → Save As to preserve the original.
 
-7. For the first local test, open the patched output in two mGBA instances, enter the overworld, load inject.local-server.lua in the first and inject.local-client.lua in the second, and confirm both trainers can see each other moving. Then test a route transition. This workflow is local server/client link mode; it does not imply online Internet matchmaking.
+7. Test two local players. In PowerShell, start the submodule's local relay and TCP bridges using the scripts already generated above:
+
+~~~powershell
+Push-Location ./third_party/gen3-poke-multiplayer/net
+./run-local.ps1 -SkipBuild
+~~~
+
+Open the patched ROM in two mGBA instances and enter the overworld. In instance 1, load resources/multiplayer/inject.p1.lua via Tools → Scripting → Load script; in instance 2, load resources/multiplayer/inject.p2.lua. Confirm both trainers can see each other moving, then test a route transition. Keep the relay/bridge process open while playing.
 
 ## Tests and release status
 
@@ -76,4 +85,4 @@ Run the Python packaging tests without a ROM:
 python -m unittest discover -s tools/tests -v
 ~~~
 
-CI also builds CUBHMA and runs its unit-test project. The real Emerald build, actual payload fit, two-instance multiplayer session, map transitions and clean-ROM BPS output still need to be tested locally before this feature is release-ready.
+CI also builds CUBHMA and runs its unit-test project. The actual Emerald build, payload fit, two-instance session, map transitions and clean-ROM BPS output still need local validation before this feature is release-ready.

@@ -98,7 +98,7 @@ def revert(project_root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pokeemerald", required=True, type=Path, help="Path to a local pret/pokeemerald checkout.")
-    parser.add_argument("--revert", action="store_true", help="Remove our insertions and restore the backup.")
+    parser.add_argument("--revert", action="store_true", help="Remove our two insertions and delete the backup.")
     args = parser.parse_args()
     try:
         revert(args.pokeemerald) if args.revert else integrate(args.pokeemerald)
