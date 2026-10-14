@@ -30,6 +30,13 @@ namespace HavenSoft.HexManiac.Core.Models {
 
       public bool IsEmpty => NamedAnchors.Count == 0 && UnmappedPointers.Count == 0 && Lists.Count == 0 && TableGroups.Count == 0;
 
+      /// <summary>
+      /// True when this metadata describes a pokeemerald-expansion build (like CUBE): its trainer parties are `tpte` runs.
+      /// Such a ROM still has the game code of the game it was built from, but the vanilla reference tables don't describe it:
+      /// the "upgrade to the new HMA version" step must not lay the vanilla tables over it.
+      /// </summary>
+      public bool DescribesExpansionLayout => NamedAnchors.Any(anchor => anchor.Format != null && anchor.Format.Contains("`tpte`"));
+
       // for backwards compatibility for tests
       public StoredMetadata(
          IReadOnlyList<StoredAnchor> anchors,

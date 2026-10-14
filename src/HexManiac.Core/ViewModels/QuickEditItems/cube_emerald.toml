@@ -1,5 +1,5 @@
 [General]
-ApplicationVersion = '''0.7.1'''
+ApplicationVersion = '''0.7.2'''
 FreeSpaceSearch = '''1BD9000'''
 FreeSpaceBuffer = '''040'''
 NextExportID = '''0'''

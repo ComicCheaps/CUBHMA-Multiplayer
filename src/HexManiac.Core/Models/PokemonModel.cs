@@ -259,7 +259,8 @@ namespace HavenSoft.HexManiac.Core.Models {
 
             TableGroups.AddRange(metadata.TableGroups);
 
-            if (!metadata.IsEmpty && StoredMetadata.NeedVersionUpdate(metadata.Version, singletons?.MetadataInfo.VersionNumber ?? "0")) {
+            // (an expansion ROM such as CUBE keeps the vanilla game code: the vanilla upgrade would replace its tables, groups and lists with vanilla Emerald's)
+            if (!metadata.IsEmpty && !metadata.DescribesExpansionLayout && StoredMetadata.NeedVersionUpdate(metadata.Version, singletons?.MetadataInfo.VersionNumber ?? "0")) {
                var gameCode = this.GetGameCode();
                if (singletons.GameReferenceTables.TryGetValue(gameCode, out var tables)) {
                   var metadatas = GetDefaultMetadatas(gameCode.Substring(0, 4), gameCode);

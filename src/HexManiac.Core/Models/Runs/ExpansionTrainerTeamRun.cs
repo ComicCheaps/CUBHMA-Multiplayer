@@ -194,6 +194,23 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
          return Math.Max(0, names.IndexOfPartial(text));
       }
 
+      /// <summary>
+      /// Like FindOption, but a number is used as-is, and when the name list isn't available (the table's anchor is missing or broken)
+      /// the old value is kept: FindOption would answer 0 for every name, which wipes species / moves / items.
+      /// </summary>
+      private static int FindOptionOrKeep(IReadOnlyList<string> names, string text, int oldValue) {
+         var trimmed = text.Trim().Trim('"');
+         if (int.TryParse(trimmed, out var number) && number >= 0) return number;
+         if (names == null || names.Count == 0) return oldValue;
+         return FindOption(names, text);
+      }
+
+      private static int ReadValue(byte[] bytes, int offset, int width) {
+         int value = 0;
+         for (int i = 0; i < width; i++) value |= bytes[offset + i] << (8 * i);
+         return value;
+      }
+
       private static string Quote(string name) => name.Contains(' ') && !name.StartsWith("\"") ? $"\"{name}\"" : name;
 
       private static int[] UnpackIVs(int packed) => Enumerable.Range(0, 6).Select(i => (packed >> (5 * i)) & 31).ToArray();
@@ -286,7 +303,7 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
             if (line.StartsWith("-")) {
                if (current == null || moveIndex >= 4) continue;
                var moveName = line.Substring(1).Trim().Trim('"');
-               var moveID = moveName is "" or "-" or "none" ? 0 : FindOption(moves, moveName);
+               var moveID = moveName is "" or "-" or "none" ? 0 : FindOptionOrKeep(moves, moveName, ReadValue(current, Offset_Moves + moveIndex * 2, 2));
                WriteValue(current, Offset_Moves + moveIndex * 2, 2, moveID);
                moveIndex++;
             } else if (line.StartsWith("*")) {
@@ -301,12 +318,12 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                records.Add(current);
                evsWritten.Add(false);
                moveIndex = 0;
-               for (int j = 0; j < 4; j++) WriteValue(current, Offset_Moves + j * 2, 2, 0);
+               if (moves != null && moves.Count > 0) for (int j = 0; j < 4; j++) WriteValue(current, Offset_Moves + j * 2, 2, 0);
                current[Offset_Level] = (byte)level.LimitToRange(0, 255);
                var rest = tokens[1];
                var itemSplit = rest.Split('@', 2);
                var itemID = 0;
-               if (itemSplit.Length == 2) itemID = FindOption(items, itemSplit[1]);
+               if (itemSplit.Length == 2) itemID = FindOptionOrKeep(items, itemSplit[1], ReadValue(current, Offset_Item, 2));
                WriteValue(current, Offset_Item, 2, itemID);
                var ivSplit = itemSplit[0].Split('(', 2);
                if (ivSplit.Length == 2) {
@@ -318,7 +335,7 @@ namespace HavenSoft.HexManiac.Core.Models.Runs {
                   WriteValue(current, Offset_Ivs, 4, PackIVs(ivs));
                }
                var speciesName = ivSplit[0].Trim().Trim('"');
-               WriteValue(current, Offset_Species, 2, FindOption(species, speciesName));
+               WriteValue(current, Offset_Species, 2, FindOptionOrKeep(species, speciesName, ReadValue(current, Offset_Species, 2)));
             }
          }
          for (int i = 0; i < records.Count; i++) {

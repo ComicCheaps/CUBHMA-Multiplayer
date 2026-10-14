@@ -229,6 +229,76 @@ namespace HavenSoft.HexManiac.Tests {
          Assert.Contains("* tera=Fire", team.Content);
       }
 
+      private const string CharizardPaste = "50 Charizard (IVs=31)\n- Flamethrower\n- Air Slash\n- Roost\n- Solar Beam\n* tera=Fire nature=Timid";
+
+      [SkippableTheory]
+      [InlineData(117, false)]
+      [InlineData(117, true)]
+      [InlineData(Roxanne, false)]
+      [InlineData(Calvin, true)]
+      public void TableToolTeamEditor_PasteOverTeam_KeepsMovesAndTrainer(int trainer, bool crlf) {
+         var viewPort = new ViewPort("CUBE.gba", model, InstantDispatch.Instance, BaseViewModelTestClass.Singletons);
+         var trainers = model.GetTableModel(HardcodeTablesModel.TrainerTableName);
+         var trainerStart = trainers[trainer].Start;
+         var length = trainers.Run.ElementLength;
+         viewPort.Goto.Execute(trainerStart);
+         var childCount = viewPort.Tools.TableTool.Children.Count;
+         var team = viewPort.Tools.TableTool.Children.OfType<TrainerPokemonTeamElementViewModel>().Single();
+         var before = model.RawData.Skip(trainerStart).Take(length).ToArray();
+
+         var paste = crlf ? CharizardPaste.Replace("\n", "\r\n") : CharizardPaste;
+         team.Content = paste;
+         team.Content = paste.Replace("tera=Fire", "tera=Water");
+
+         var run = Team(trainer);
+         var text = run.SerializeRun();
+         Assert.True(Enumerable.Range(0, 4).All(i => model.ReadMultiByteValue(run.Start + 12 + 2 * i, 2) != 0), "moves lost: " + text);
+         Assert.Contains("- Flamethrower", text);
+         Assert.Contains("- \"Solar Beam\"", text);
+         Assert.Equal(TypeWater, Byte(run, 0, TeraDynamax) & 31);
+         var after = model.RawData.Skip(trainerStart).Take(length).ToArray();
+         var teamField = FieldOffset(trainers.Run, "pokemon"); var countField = FieldOffset(trainers.Run, "pokemonCount");
+         var diffs = Enumerable.Range(0, length).Where(i => before[i] != after[i] && !(i >= teamField && i < teamField + 4) && i != countField).ToList();
+         Assert.True(diffs.Count == 0, "trainer bytes changed at " + string.Join(",", diffs));
+         Assert.Equal(1, after[countField]);
+         Assert.Equal(childCount, viewPort.Tools.TableTool.Children.Count);
+      }
+
+      /// <summary>
+      /// A CUBE TOML saved by an older CUBHMA triggers HMA's "metadata upgrade" on load. CUBE has the vanilla Emerald game code, and the upgrade used to
+      /// lay vanilla Emerald's tables and table groups over it: the trainer panel lost its layout (only aiFlags / team left) and the species / moves anchors
+      /// were gone, so a pasted team lost its moves.
+      /// </summary>
+      [SkippableFact]
+      public void OlderCubeToml_DoesNotGetTheVanillaUpgrade_AndAPastedTeamKeepsItsMoves() {
+         var path = Environment.GetEnvironmentVariable("HMA_INTRO_CUBE");
+         var tomlLines = File.ReadAllLines(Environment.GetEnvironmentVariable("HMA_INTRO_CUBE_TOML"))
+            .Select(line => line.StartsWith("ApplicationVersion = ") ? "ApplicationVersion = '''0.1'''" : line).ToArray();
+         var metadata = new StoredMetadata(tomlLines);
+         Assert.True(StoredMetadata.NeedVersionUpdate(metadata.Version, BaseViewModelTestClass.Singletons.MetadataInfo.VersionNumber ?? "1"));
+         Assert.True(metadata.DescribesExpansionLayout);
+         var old = new HardcodeTablesModel(BaseViewModelTestClass.Singletons, File.ReadAllBytes(path), metadata);
+         old.InitializationWorkload.Wait();
+
+         var trainerGroup = old.GetTableGroups(HardcodeTablesModel.TrainerTableName).First(group => group.GroupName == "Trainer");
+         Assert.Contains("data.trainers.stats|name,class,sprite", trainerGroup.Tables[0]);
+         Assert.True(old.GetAddressFromAnchor(new NoDataChangeDeltaModel(), -1, ExpansionTrainerTeamRun.MovesTable) >= 0);
+         Assert.True(old.GetAddressFromAnchor(new NoDataChangeDeltaModel(), -1, ExpansionTrainerTeamRun.SpeciesTable) >= 0);
+
+         var trainers = old.GetTableModel(HardcodeTablesModel.TrainerTableName);
+         var run = (ExpansionTrainerTeamRun)old.GetNextRun(trainers[117].GetAddress("pokemon"));
+         var newRun = (ExpansionTrainerTeamRun)run.DeserializeRun(CharizardPaste, new ModelDelta(), out _, out _);
+         var text = newRun.SerializeRun();
+         Assert.StartsWith("50 Charizard (IVs=31)", text);
+         Assert.Contains("- \"Solar Beam\"", text);
+      }
+
+      private static int FieldOffset(ITableRun table, string name) {
+         int offset = 0;
+         foreach (var segment in table.ElementContent) { if (segment.Name == name) return offset; offset += segment.Length; }
+         return -1;
+      }
+
       private (ObjectEventViewModel, int) FindRouteTrainer(int trainer) {
          var banks = model.GetTableModel("data.maps.banks");
          foreach (var bank in banks) {
