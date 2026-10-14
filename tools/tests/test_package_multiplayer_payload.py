@@ -27,7 +27,7 @@ def fake_payload(size=32):
 
 
 def package_small(target_rom, payload, map_text, output_size=0x5000):
-    return package_small(target_rom, payload, map_text, output_size=output_size)
+    return package_payload(target_rom, payload, map_text, output_size=output_size)
 
 
 class PackagePayloadTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class PackagePayloadTests(unittest.TestCase):
     def test_embeds_payload_and_patches_descriptor(self):
         source = fake_rom()
         payload = fake_payload()
-        result = package_payload(source, payload, "0x0203D080 payload_end = .\n")
+        result = package_small(source, payload, "0x0203D080 payload_end = .\n")
         payload_offset = (len(source) + 3) & ~3
         address, size, clear_size = struct.unpack_from("<III", result, 0x1000)
         self.assertEqual(0x08000000 + payload_offset, address)
@@ -57,33 +57,33 @@ class PackagePayloadTests(unittest.TestCase):
         rom = bytearray(fake_rom())
         rom[0x1000:0x1000 + len(DESCRIPTOR_MARKERS)] = bytes(len(DESCRIPTOR_MARKERS))
         with self.assertRaisesRegex(ValueError, "descriptor"):
-            package_payload(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
+            package_small(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
 
     def test_rejects_duplicate_descriptors(self):
         rom = bytearray(fake_rom())
         rom[0x2000:0x2000 + len(DESCRIPTOR_MARKERS)] = DESCRIPTOR_MARKERS
         with self.assertRaisesRegex(ValueError, "found 2"):
-            package_payload(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
+            package_small(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
 
     def test_rejects_wrong_game_code(self):
         rom = bytearray(fake_rom())
         rom[0xAC:0xB0] = b"BPRE"
         with self.assertRaisesRegex(ValueError, "BPEE"):
-            package_payload(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
+            package_small(bytes(rom), fake_payload(), "0x0203D080 payload_end = .")
 
     def test_rejects_wrong_payload_header(self):
         payload = bytearray(fake_payload())
         payload[8:12] = b"NOPE"
         with self.assertRaisesRegex(ValueError, "HOOK"):
-            package_payload(fake_rom(), bytes(payload), "0x0203D080 payload_end = .")
+            package_small(fake_rom(), bytes(payload), "0x0203D080 payload_end = .")
 
     def test_rejects_payload_region_too_small(self):
         with self.assertRaisesRegex(ValueError, "smaller than payload"):
-            package_payload(fake_rom(), fake_payload(300), "0x0203D080 payload_end = .")
+            package_small(fake_rom(), fake_payload(300), "0x0203D080 payload_end = .")
 
     def test_rejects_payload_region_too_large(self):
         with self.assertRaisesRegex(ValueError, "too large"):
-            package_payload(fake_rom(), fake_payload(), "0x02040000 payload_end = .")
+            package_small(fake_rom(), fake_payload(), "0x02040000 payload_end = .")
 
     def test_rom_loader_leaves_irq_vector_for_mgba_injection(self):
         repo_root = Path(__file__).resolve().parents[2]
