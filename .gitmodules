@@ -1,0 +1,3 @@
+[submodule "third_party/gen3-poke-multiplayer"]
+	path = third_party/gen3-poke-multiplayer
+	url = https://github.com/Wired-Ariel/gen3-poke-multiplayer.git

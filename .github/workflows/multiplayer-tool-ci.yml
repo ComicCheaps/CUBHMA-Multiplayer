@@ -1,0 +1,41 @@
+name: Multiplayer tool checks
+
+on:
+  push:
+    branches:
+      - feature/multiplayer-patch-tool
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test BPS patch generator
+        run: python -m unittest discover -s tools/tests -v
+      - name: Validate PowerShell helper syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "tools/prepare_multiplayer_patch.ps1"), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+      - name: Build CUBHMA
+        run: dotnet build HexManiacAdvance.sln -c Release -p:PlatformTarget=x64
+      - name: Test CUBHMA unit project
+        run: dotnet test src/HexManiac.Tests/HexManiac.Tests.csproj --no-build -c Release -p:PlatformTarget=x64 --logger "console;verbosity=normal"

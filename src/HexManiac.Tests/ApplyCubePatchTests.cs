@@ -151,6 +151,16 @@ namespace HavenSoft.HexManiac.Tests {
       }
 
       [Fact]
+      public void UtilitiesMisc_ListsApplyMultiplayer_ThatRequiresAnOpenVanillaRom() {
+         var command = editor.QuickEditsMisc.OfType<ApplyMultiplayerPatch>().Single();
+
+         Assert.Equal("Apply Emerald Multiplayer", command.Name);
+         Assert.False(command is IStandaloneQuickEdit);
+         Assert.Contains("BPS patch", command.Description);
+         Assert.False(command.CanRun(null));
+      }
+
+      [Fact]
       public void RunQuickEdit_WithNoTabOpen_DoesNothing() {
          var command = editor.QuickEditsMisc.OfType<ApplyCubePatch>().Single();
 
