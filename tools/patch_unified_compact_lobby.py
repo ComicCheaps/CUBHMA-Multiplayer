@@ -145,7 +145,7 @@ def main() -> int:
 
         source = replace_region(
             source,
-            r"static const u8 sNativeLobbyTextDisconnect\[\]\s*=.*?;\s*static const u8 sNativeLobbyTextClose\[\]\s*=.*?;\s*",
+            r"static const u8 sNativeLobbyTextDisconnect\[\]\s*=.*?;\s*(?:/\*.*?\*/\s*)?static const u8 sNativeLobbyTextClose\[\]\s*=.*?;\s*(?:/\*.*?\*/)?\s*",
             "",
             "unused Disconnect/Close text constants",
         )
