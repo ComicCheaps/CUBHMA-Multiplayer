@@ -250,8 +250,8 @@ def patch_main(source: str) -> tuple[str, bool]:
         if "CUBHMA_UNIFIED_STATE_TIMER_COMPACT" in source:
             return source, False
         already_guarded = (
-            "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME)\\n"
-            "    sStateTimer = 60;\\n"
+            "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
+            "    sStateTimer = 60;\n"
             "#endif"
         )
         if already_guarded in source:
