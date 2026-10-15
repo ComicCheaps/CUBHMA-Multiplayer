@@ -52,28 +52,28 @@ def patch_sio(source: str) -> tuple[str, bool]:
     )
 
     role_anchor_with_proto = (
-        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n"
-        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\\n"
-        " * otherwise the remaining child windows would lose their clock source. */\\n"
-        "static volatile u8 sNativeTransportStarted;\\n"
-        "u8 SioGetDeviceId(void);\\n"
+        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n"
+        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\n"
+        " * otherwise the remaining child windows would lose their clock source. */\n"
+        "static volatile u8 sNativeTransportStarted;\n"
+        "u8 SioGetDeviceId(void);\n"
     )
     role_anchor_without_proto = (
-        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n"
-        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\\n"
-        " * otherwise the remaining child windows would lose their clock source. */\\n"
-        "static volatile u8 sNativeTransportStarted;\\n"
+        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n"
+        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\n"
+        " * otherwise the remaining child windows would lose their clock source. */\n"
+        "static volatile u8 sNativeTransportStarted;\n"
     )
     if source.count(role_anchor_with_proto) == 1:
         source = source.replace(
             role_anchor_with_proto,
-            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n",
+            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n",
             1,
         )
     elif source.count(role_anchor_without_proto) == 1:
         source = source.replace(
             role_anchor_without_proto,
-            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n",
+            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n",
             1,
         )
     else:
