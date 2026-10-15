@@ -42,13 +42,15 @@ static void SampleNativeSnapshot(s16 x, s16 y, u8 dir, u8 speed, u32 mapKey)
             if (words[i] != sSioSnapshotLastSampleWords[i])
                 changed = 1;
 
-    /* Check at 60 Hz so short turns are not lost, but cap unchanged-state
-     * sampling at 20 Hz. State changes publish immediately. */
-    if (++sSioSnapshotSampleFrames < 3u && !changed)
+    /* Check every frame so short turns are not missed. Publish changed state
+     * immediately; resend unchanged state every 15 frames (4 Hz) as a small
+     * loss-recovery heartbeat. Full-rate unchanged snapshots waste link words. */
+    if (changed)
+        sSioSnapshotHeartbeatFrames = 0;
+    else if (++sSioSnapshotHeartbeatFrames < 15u)
         return;
-    sSioSnapshotSampleFrames = 0;
-    if (!changed)
-        return;
+    else
+        sSioSnapshotHeartbeatFrames = 0;
 
     /* Double buffering prevents the VBlank IRQ TX pump from reading a partly
      * updated four-word snapshot while the main loop is publishing it. */
@@ -252,7 +254,7 @@ static u16 sSioSnapshotLastSampleWords[SIO_SNAPSHOT_WORDS];
 static u8 sSioSnapshotHaveActive;
 static u8 sSioSnapshotTxPending;
 static u8 sSioSnapshotPreferSnapshot = 1u;
-static u8 sSioSnapshotSampleFrames;
+static u8 sSioSnapshotHeartbeatFrames;
 static u8 sSioSnapshotHaveLastSample;
 
 /* CUBHMA_NATIVE_SNAPSHOT_RX_TX */
