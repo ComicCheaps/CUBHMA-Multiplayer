@@ -14,7 +14,7 @@ from pathlib import Path
 
 MARKER = "CUBHMA_NATIVE_MOVEMENT_SNAPSHOTS"
 SNAPSHOT_TAG = "CUBHMA_NATIVE_SNAPSHOT_RX_TX"
-SAMPLE_FUNCTION = r'''#ifdef PAYLOAD_WITH_SIO
+SAMPLE_FUNCTION = r'''#ifdef PAYLOAD_NATIVE_SIO
 /* CUBHMA_NATIVE_MOVEMENT_SNAPSHOTS
  * Check movement each frame so even short turns are detected. Changed states
  * are sent immediately; unchanged state repeats at 4 Hz for loss recovery. A
@@ -68,7 +68,7 @@ static void SampleNativeSnapshot(s16 x, s16 y, u8 dir, u8 speed, u32 mapKey)
 
 '''
 
-CONSUME_FUNCTION = r'''#ifdef PAYLOAD_WITH_SIO
+CONSUME_FUNCTION = r'''#ifdef PAYLOAD_NATIVE_SIO
 /* Apply the latest compact snapshot independently of the reliable-event queue.
  * A newer snapshot replaces an older one, so missed frames cannot build a
  * backlog. The avatar animates one tile at a time toward the latest authority.
@@ -242,7 +242,8 @@ def main() -> int:
         # These symbols are in the native-SIO section, immediately before the
         # receive dispatcher. The receive handler only copies four words; it
         # never calls game routines from the serial interrupt.
-        state = r'''#define SIO_T_SNAPSHOT 0x05u
+        state = r'''#ifdef PAYLOAD_NATIVE_SIO
+#define SIO_T_SNAPSHOT 0x05u
 #define SIO_SNAPSHOT_WORDS 4u
 static volatile u32 sSioSnapshotRxVersion;
 static volatile u16 sSioSnapshotRxWords[SIO_SNAPSHOT_WORDS];
@@ -258,6 +259,7 @@ static u8 sSioSnapshotHeartbeatFrames;
 static u8 sSioSnapshotHaveLastSample;
 
 /* CUBHMA_NATIVE_SNAPSHOT_RX_TX */
+#endif
 '''
         source = replace_once(source, "int SioDeliverFrame(u8 type, const u16 *words, u8 count)\n{", state + "\nint SioDeliverFrame(u8 type, const u16 *words, u8 count)\n{", "SIO snapshot state block")
 
@@ -266,7 +268,8 @@ static u8 sSioSnapshotHaveLastSample;
             '''    if (type != SIO_T_EVENT || count != (u8)(sizeof(struct NetEvent) / 2))
         return 1;
 ''',
-            '''    if (type == SIO_T_SNAPSHOT)
+            '''#ifdef PAYLOAD_NATIVE_SIO
+    if (type == SIO_T_SNAPSHOT)
     {
         if (count != SIO_SNAPSHOT_WORDS)
             return 1;
@@ -278,6 +281,7 @@ static u8 sSioSnapshotHaveLastSample;
         sSioSnapshotRxVersion++;
         return 1;
     }
+#endif
 
     if (type != SIO_T_EVENT || count != (u8)(sizeof(struct NetEvent) / 2))
         return 1;
@@ -287,6 +291,7 @@ static u8 sSioSnapshotHaveLastSample;
 
         new_pump = r'''static void SioPumpTx(void)
 {
+#ifdef PAYLOAD_NATIVE_SIO
     int eventPending = (g_mailbox.txTail != g_mailbox.txHead);
 
     /* Alternate compact snapshots with reliable events whenever both exist.
@@ -320,6 +325,16 @@ static u8 sSioSnapshotHaveLastSample;
         sSioSnapshotTxPending = 0;
         sSioSnapshotPreferSnapshot = 0;
     }
+#else
+    while (g_mailbox.txTail != g_mailbox.txHead)
+    {
+        u32 tail = g_mailbox.txTail;
+        if (!SioSendFrame(SIO_T_EVENT, (const u16 *)&g_mailbox.tx[tail],
+                          (u8)(sizeof(struct NetEvent) / 2)))
+            break;
+        g_mailbox.txTail = WRAP(tail, TX_SLOTS);
+    }
+#endif
 }'''
         source = replace_once(
             source,
@@ -357,20 +372,20 @@ static u8 sSioSnapshotHaveLastSample;
     {
         sLastPlayerX = x;
         sLastPlayerY = y;
-#ifndef PAYLOAD_WITH_SIO
+#ifndef PAYLOAD_NATIVE_SIO
         EmitEvent(EVENT_STEP, dir, (u8)speed, x, y);
 #endif
     }
     else if (dir != sLastPlayerDir)
     {
         /* Fermo ma girato: nessun PASSO lo racconterebbe. */
-#ifndef PAYLOAD_WITH_SIO
+#ifndef PAYLOAD_NATIVE_SIO
         EmitEvent(EVENT_TURN, dir, (u8)speed, x, y);
 #endif
     }
     sLastPlayerDir = dir;
 
-#ifdef PAYLOAD_WITH_SIO
+#ifdef PAYLOAD_NATIVE_SIO
     SampleNativeSnapshot(x, y, dir, (u8)speed, mapKey);
 #endif
 '''
@@ -382,7 +397,7 @@ static u8 sSioSnapshotHaveLastSample;
         EmitEvent(EVENT_SYNC, dir, (u8)speed, x, y);
     }
 '''
-        periodic_sync_new = '''#ifndef PAYLOAD_WITH_SIO
+        periodic_sync_new = '''#ifndef PAYLOAD_NATIVE_SIO
     /* Native SIO uses the compact latest-state snapshot for steady correction.
      * Keep the one-second periodic event only in legacy event-transport builds. */
     if (++sFramesSinceSync >= SYNC_PERIOD)
@@ -414,7 +429,7 @@ static u8 sSioSnapshotHaveLastSample;
             '''    DrainMailbox();
     for (i = 0; i < N_REMOTES; i++)
         ConsumeSlotEvents(i);
-#ifdef PAYLOAD_WITH_SIO
+#ifdef PAYLOAD_NATIVE_SIO
     ConsumeNativeSnapshot();
 #endif
 }''',
