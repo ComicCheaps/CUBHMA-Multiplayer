@@ -164,6 +164,15 @@ def main() -> int:
         if "CUBHMA_NATIVE_MOVEMENT_SNAPSHOTS" not in source:
             raise ValueError("Movement snapshot patch is missing. Run patch_native_movement_snapshots.py first.")
 
+        # This byte is written by the main-loop sampler and consumed by the
+        # VBlank IRQ TX pump, so it must be volatile across asynchronous access.
+        pending_old = "static u8 sSioSnapshotTxPending;"
+        pending_new = "static volatile u8 sSioSnapshotTxPending;"
+        if pending_old in source:
+            source = source.replace(pending_old, pending_new, 1)
+        elif pending_new not in source:
+            raise ValueError("Cannot find the shared snapshot TX-pending flag.")
+
         source = replace_once(source, OLD_PEER_LOOKUP, NEW_PEER_LOOKUP, "peer lookup/bootstrap")
         source = replace_once(source, OLD_HARD_RESYNC, NEW_HARD_RESYNC, "hard-resync threshold")
 
