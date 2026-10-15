@@ -252,7 +252,7 @@ def patch_main(source: str) -> tuple[str, bool]:
         source = once(
             source,
             "    sStateTimer = 60;",
-            "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\\n    sStateTimer = 60;\\n#endif",
+            "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\n    sStateTimer = 60;\n#endif",
             "status-change diagnostic timer reset",
         )
         return source, True
@@ -342,7 +342,7 @@ def patch_main(source: str) -> tuple[str, bool]:
     source = once(
         source,
         "    sStateTimer = 60;",
-        "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\\n    sStateTimer = 60;\\n#endif",
+        "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\n    sStateTimer = 60;\n#endif",
         "status-change diagnostic timer reset",
     )
     source = once(
