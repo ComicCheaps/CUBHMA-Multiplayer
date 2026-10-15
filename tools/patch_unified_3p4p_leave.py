@@ -3,7 +3,7 @@
 
 Run from the CUBHMA-Multiplayer checkout after the existing unified-role,
 compact-lobby, and Start-menu request patches:
-  python .\tools\patch_unified_3p4p_leave.py
+  python tools/patch_unified_3p4p_leave.py
 
 Then rebuild pokeemerald in WSL and run prepare_unified_native_link_rom.ps1.
 This source transformation is intentionally guarded and writes backups.
