@@ -194,6 +194,7 @@ def ensure_functions(gen: str) -> tuple[str, bool]:
     signatures = (
         ("FreezeObjectEvents", '"void (*)(void)"'),
         ("UnfreezeObjectEvents", '"void (*)(void)"'),
+        ("ClearStdWindowAndFrame", '"void (*)(u8, u8)"'),
         ("PlayerFreeze", '"void (*)(void)"'),
         ("StopPlayerAvatar", '"void (*)(void)"'),
         ("CalculatePlayerPartyCount", '"u8 (*)(void)"'),
