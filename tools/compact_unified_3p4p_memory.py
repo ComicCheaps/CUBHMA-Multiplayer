@@ -246,7 +246,16 @@ def patch_sio(source: str) -> tuple[str, bool]:
 
 def patch_main(source: str) -> tuple[str, bool]:
     if MARKER in source:
-        return source, False
+        # Repair older already-compacted trees that missed this one assignment.
+        if "CUBHMA_UNIFIED_STATE_TIMER_COMPACT" in source:
+            return source, False
+        source = once(
+            source,
+            "    sStateTimer = 60;",
+            "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\\n    sStateTimer = 60;\\n#endif",
+            "status-change diagnostic timer reset",
+        )
+        return source, True
     if "CUBHMA_UNIFIED_3P4P_PER_PEER_RX" not in source:
         raise ValueError("The per-peer native 3P/4P payload patch has not been applied.")
 
@@ -328,6 +337,14 @@ def patch_main(source: str) -> tuple[str, bool]:
         "periodic telemetry conditional",
     )
 
+    # SetLocalStatus resets this diagnostic timer when local status changes.
+    # It is absent from unified builds along with SioSendSonda, so guard the reset too.
+    source = once(
+        source,
+        "    sStateTimer = 60;",
+        "#if !defined(PAYLOAD_NATIVE_SIO_RUNTIME) /* CUBHMA_UNIFIED_STATE_TIMER_COMPACT */\\n    sStateTimer = 60;\\n#endif",
+        "status-change diagnostic timer reset",
+    )
     source = once(
         source,
         "/* CUBHMA_UNIFIED_3P4P_PER_PEER_RX: receive independent streams from all three remote slots. */",
