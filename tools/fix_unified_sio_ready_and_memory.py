@@ -90,12 +90,12 @@ def patch_remote_state(source: str) -> tuple[str, bool]:
             )
 
     old_comment = (
-        " * e ora e' \\"il remoto dello slot s\\". I campi restano u32/s32 per la lezione\n"
+        " * e ora e' \"il remoto dello slot s\". I campi restano u32/s32 per la lezione\n"
         " * Thumb-1 del 2026-08-23 (i tipi stretti costano istruzioni); i campi di\n"
         " * g_state con lo stesso nome restano vivi come SPECCHIO dello slot primario,\n"
     )
     new_comment = (
-        " * e ora e' \\"il remoto dello slot s\\". Flag, ID e indici usano u8/u16 dopo\n"
+        " * e ora e' \"il remoto dello slot s\". Flag, ID e indici usano u8/u16 dopo\n"
         " * averne verificato l'intervallo; coordinate e mapKey seguono i campi sul filo.\n"
         " * I campi di g_state con lo stesso nome restano lo SPECCHIO dello slot primario,\n"
     )
