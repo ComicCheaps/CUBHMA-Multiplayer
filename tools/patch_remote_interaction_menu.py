@@ -347,8 +347,22 @@ def main() -> int:
                 "ADDR_Menu_ProcessInputNoWrap",
             )
             if all(item in source for item in required):
-                main_changed = False
                 new_main = source
+                main_changed = False
+                # gen_syms.py emits function-pointer macros named after each
+                # function, not ADDR_Function constants. Repair our earlier
+                # bad casts in-place when this patch is rerun after an update.
+                for function_name in (
+                    "LoadMessageBoxAndBorderGfx", "AddStartMenuWindow",
+                    "DrawStdWindowFrame", "PrintMenuActionTextsAtPos",
+                    "InitMenuNormal", "CopyWindowToVram",
+                    "Menu_ProcessInputNoWrap", "GetStartMenuWindowId",
+                    "RemoveStartMenuWindow",
+                ):
+                    wrong = "ADDR_" + function_name
+                    if wrong in new_main:
+                        new_main = new_main.replace(wrong, function_name)
+                        main_changed = True
             else:
                 raise ValueError("main.c has a partial interaction-menu patch; inspect it manually.")
         else:
