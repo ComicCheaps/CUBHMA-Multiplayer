@@ -229,14 +229,28 @@ def main() -> int:
 
     root = Path(sys.argv[1]).resolve()
     main_path = root / "payload" / "main.c"
+    build_path = root / "build.ps1"
     if not main_path.is_file():
         print(f"error: source file not found: {main_path}", file=sys.stderr)
+        return 1
+    if not build_path.is_file():
+        print(f"error: build script not found: {build_path}", file=sys.stderr)
         return 1
 
     try:
         source = main_path.read_text(encoding="utf-8")
+        build_text = build_path.read_text(encoding="utf-8")
+        build_changed = False
+        native_main_define = 'if ($WithSio -and $NativeSioRole -ne "adapter") { $mainDefs += "-DPAYLOAD_NATIVE_SIO" }'
+        if native_main_define not in build_text:
+            build_anchor = '$mainDefs = @()\nif ($WithSio) { $mainDefs += "-DPAYLOAD_WITH_SIO" }\n'
+            build_insert = build_anchor + native_main_define + '\n'
+            build_text = replace_once(build_text, build_anchor, build_insert, "native-role main.c compile define")
+            build_changed = True
         if MARKER in source:
-            print("Native movement snapshots are already patched; no changes made.")
+            if build_changed:
+                backup_and_write(build_path, build_text)
+            print("Native movement snapshots are already patched; verified native role compile flag.")
             return 0
 
         # These symbols are in the native-SIO section, immediately before the
@@ -448,15 +462,17 @@ static u8 sSioSnapshotHaveLastSample;
                 raise ValueError(f"Patch validation failed; missing expected marker: {required}")
 
         backup_and_write(main_path, source)
+        if build_changed:
+            backup_and_write(build_path, build_text)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print("Native movement snapshot patch applied to payload/main.c.")
+    print("Native movement snapshot patch applied to payload/main.c and build.ps1.")
     print("Both ROMs check movement every frame, send changes immediately, and repeat the latest state at 4 Hz.")
     print("The receiver reconciles against the latest snapshot instead of accumulating predicted step events.")
     print("Reliable events remain enabled for map entry, status, and trainer-card flows.")
-    print("Backup: payload/main.c.pre-native-movement-snapshots.bak")
+    print("Backups: payload/main.c.pre-native-movement-snapshots.bak and build.ps1.pre-native-movement-snapshots.bak")
     print("Next: rebuild native-link ROMs with tools/prepare_native_link_roms.ps1.")
     return 0
 
