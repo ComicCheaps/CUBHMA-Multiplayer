@@ -90,8 +90,8 @@ def patch_sio(source: str) -> tuple[str, bool]:
         "three-parser reset loop",
     )
     clock_old = "if (sNativeTransportStarted && SioGetDeviceId() == 0u)\n        REG_SIOCNT |= SIOCNT_START;"
-    if source.count(clock_old) != 2:
-        raise ValueError("Expected exactly two device-zero clock gates in SioArm and SioOnSerialIrq.")
+    if source.count(clock_old) != 1:
+        raise ValueError("Expected one SioArm device-zero clock gate.")
     source = source.replace(
         clock_old,
         "if (SioGetDeviceId() == 0u)\n        REG_SIOCNT |= SIOCNT_START;",
