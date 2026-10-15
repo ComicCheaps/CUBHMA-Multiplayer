@@ -19,6 +19,8 @@ EXTRA_FUNCTIONS = '''    # CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS: freeze fiel
         "void (*)(void)",
     "UnfreezeObjectEvents":
         "void (*)(void)",
+    "ClearStdWindowAndFrame":
+        "void (*)(u8, u8)",
     "PlayerFreeze":
         "void (*)(void)",
     "StopPlayerAvatar":
@@ -60,6 +62,13 @@ NEW_OPEN = '''static void OpenRemoteInteractionMenu(u32 slot)
 
 NEW_CLOSE = '''static void CloseRemoteInteractionMenu(void)
 {
+    u8 windowId = ((u8 (*)(void))GetStartMenuWindowId)();
+
+    /* Removing the menu window alone releases its allocation but can leave
+     * the old frame/text visible in VRAM. Vanilla Emerald clears the window
+     * before removing it; mirror that behavior here. */
+    if (sRemoteMenuOpen && windowId != 0xFFu)
+        ((void (*)(u8, u8))ClearStdWindowAndFrame)(windowId, 1u);
     if (sRemoteMenuOpen)
         ((void (*)(void))RemoveStartMenuWindow)();
 
@@ -260,6 +269,10 @@ def main() -> int:
         if "PlayerUnfreeze();" in new_source:
             new_source = new_source.replace("PlayerUnfreeze();", "UnfreezeObjectEvents();")
             source_changed = True
+        # Always repair the close handler on existing patched source too.
+        new_source, close_changed = replace_function(new_source, "CloseRemoteInteractionMenu", NEW_CLOSE)
+        source_changed = source_changed or close_changed
+
         old_open_freeze = "    LockPlayerFieldControls();\n    PlayerFreeze();\n    StopPlayerAvatar();"
         new_open_freeze = "    LockPlayerFieldControls();\n    FreezeObjectEvents();\n    PlayerFreeze();\n    StopPlayerAvatar();"
         if old_open_freeze in new_source:
