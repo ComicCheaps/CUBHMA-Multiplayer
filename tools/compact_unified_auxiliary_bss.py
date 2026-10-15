@@ -90,6 +90,13 @@ def main() -> int:
             )
             return 1
 
+    # Validate each final declaration before touching the file on disk.
+    for name in FIELDS:
+        final_pattern = rf"(?m)^[ \\t]*static[ \\t]+u8[ \\t]+{re.escape(name)}[ \\t]*;"
+        if len(re.findall(final_pattern, changed)) != 1:
+            print(f"error: post-patch validation failed for {name}; no changes made.", file=sys.stderr)
+            return 1
+
     # The status enum deliberately fits in one byte; this protects against a
     # future source change that invalidates that premise.
     for name, value in (
