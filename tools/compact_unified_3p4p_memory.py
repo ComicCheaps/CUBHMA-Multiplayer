@@ -154,6 +154,19 @@ def patch_sio(source: str) -> tuple[str, bool]:
         "if (localId == 0u)\n        REG_SIOCNT |= SIOCNT_START;",
         "always-clock-capable device zero after each transfer",
     )
+    source = once(
+        source,
+        "SioRxWord(1u, REG_SIOMULTI(1u));",
+        "SioRxWord(0u, 1u, REG_SIOMULTI(1u));",
+        "legacy master peer receive signature",
+    )
+    source = once(
+        source,
+        "SioRxWord(0u, REG_SIOMULTI(0u));",
+        "SioRxWord(0u, 0u, REG_SIOMULTI(0u));",
+        "legacy child peer receive signature",
+    )
+
     # Preserve the IRQ heartbeat used by SioTick, but discard its diagnostic-only
     # counters in the unified build to reclaim EWRAM. The legacy builds retain
     # every counter exactly as before.
