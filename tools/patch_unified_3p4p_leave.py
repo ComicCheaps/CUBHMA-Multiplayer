@@ -109,17 +109,17 @@ struct SioState {
 }'''
     if source.count(role_getter) != 1:
         raise ValueError("Could not uniquely find SioGetNativeRole.")
-    helper_anchor = "#endif\\n\\n/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */"
+    helper_anchor = "#endif\n\n/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */"
     source = once(
         source,
         helper_anchor,
-        "#endif\\n\\n"
-        "u8 SioGetDeviceId(void)\\n{\\n"
-        "    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);\\n"
-        "}\\n\\n"
-        "int SioTxIdle(void)\\n{\\n"
-        "    return sSio.txLen == 0;\\n"
-        "}\\n\\n"
+        "#endif\n\n"
+        "u8 SioGetDeviceId(void)\n{\n"
+        "    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);\n"
+        "}\n\n"
+        "int SioTxIdle(void)\n{\n"
+        "    return sSio.txLen == 0;\n"
+        "}\n\n"
         "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */",
         "native SIO helpers outside the runtime-only block",
     )
@@ -250,7 +250,7 @@ struct SioState {
     source = once(
         source,
         "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */",
-        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */\\n"
+        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */\n"
         "/* " + SIO_MARKER + ": maintain an independent RX parser for each peer. */",
         "per-peer SIO marker",
     )
