@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/multiplayer-patch-tool
+      - feature/memory-first-two-player
   pull_request:
   workflow_dispatch:
 
@@ -20,6 +21,8 @@ jobs:
           python-version: "3.12"
       - name: Test BPS patch generator
         run: python -m unittest discover -s tools/tests -v
+      - name: Test memory-first budget contract
+        run: python -m unittest discover -s memory-first/tests -v
       - name: Validate PowerShell helper syntax
         shell: powershell
         run: |

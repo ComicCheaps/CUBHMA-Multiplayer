@@ -30,20 +30,16 @@
 **Tools**
 * *Apply CUBE to a vanilla Emerald ROM...* creates CUBE from your own Emerald ROM using a built-in BPS patch and the CUBE metadata.
 
-## Experimental: local Emerald multiplayer
+## Experimental: memory-first multiplayer rebuild
 
-This branch contains an experimental local co-op path based on the pinned [gen3-poke-multiplayer](https://github.com/Wired-Ariel/gen3-poke-multiplayer) payload. It targets clean English Emerald v1.0 as the starting ROM; it is not yet a release-ready feature.
+This development branch starts a clean, **two-player-first** rebuild of the Emerald multiplayer integration. The goal is a reproducible Windows build and a small, explicitly budgeted runtime—not another round of patches to the previous four-player prototype.
 
-See [the multiplayer development guide](docs/multiplayer-development.md) for the decompilation integration, payload build, BPS patch creation and two-instance mGBA test. Once you've built the locally modified `pokeemerald.gba`, the helper can run the remaining packaging steps:
+The first compatibility target is clean English Pokémon Emerald v1.0 (BPEE). ROM hacks are not assumed compatible until their code layout and required hooks have been validated. No ROM images are included or distributed.
 
-~~~powershell
-python tools/integrate_pokeemerald.py --pokeemerald "C:/src/pokeemerald"
-# Build the modified ROM in your normal pokeemerald environment first.
-./tools/prepare_multiplayer_patch.ps1 -PokeemeraldRoot "C:/src/pokeemerald" -CleanEmeraldRom "C:/path/to/your-clean-emerald.gba"
-~~~
+See [the memory-first rebuild plan](docs/memory-first-rebuild.md). The initial memory contract is in [memory-first/include/mf_memory_budget.h](memory-first/include/mf_memory_budget.h).
 
-The helper uses your own ROM files locally, verifies the original ROM's fingerprint, and round-trip-checks the generated BPS patch. It does not download or include a ROM. Actual game-side payload loading and multiplayer behavior still need testing against the compatible local build and two mGBA instances.
-
+**Status:** architecture and budget-contract scaffold only. This branch does not yet contain a verified ROM-resident bootstrap or a working multiplayer patch. The previous experimental branches remain available for reference.
+ 
 ![Goto main menu](docs/images/goto-menu.png)
 
 ![Character Customization](docs/images/character-customization.png)
