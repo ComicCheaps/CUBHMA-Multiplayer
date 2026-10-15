@@ -125,6 +125,11 @@ static void ConsumeNativeSnapshot(void)
         return;
 
     r = &g_remotes[slot];
+    /* The reliable map-entry event owns map transitions. Do not let an older
+     * retained snapshot move the avatar back to its previous map while the
+     * matching fresh snapshot is still in flight. */
+    if (r->mapKey != mapKey)
+        return;
     if (!MapRemoteToLocal(r, mapKey, x, y, &lx, &ly, &via))
         return;
 
