@@ -266,6 +266,19 @@ def main() -> int:
             new_source = new_source.replace(old_open_freeze, new_open_freeze, 1)
             source_changed = True
 
+        # The payload's minimal game_types.h defines A_BUTTON but not B_BUTTON.
+        # GBA KEY_B is bit 1 (0x0002). Define the missing symbol locally.
+        if "#define B_BUTTON" not in new_source:
+            include_anchor = '#include "game_types.h"\n'
+            if include_anchor not in new_source:
+                raise ValueError('Cannot find #include "game_types.h" in payload/main.c.')
+            new_source = new_source.replace(
+                include_anchor,
+                include_anchor + '\n#ifndef B_BUTTON\n#define B_BUTTON 0x0002u\n#endif\n',
+                1,
+            )
+            source_changed = True
+
         if FIX_MARKER not in new_source:
             # Add the missing state fields once.
             state_anchor = "static u32 sRemoteMenuNoticeChoice;"
