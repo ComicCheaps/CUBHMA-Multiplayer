@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""Enable link-time optimization only for the unified native-SIO ROM build.
+"""Enable unified-only LTO and dead-section elimination.
 
-The compiler-only size flags did not change the linked end address. This
-reversible experiment lets GCC optimize across main.c and sio.c together;
-all other roles keep their existing compilation and link settings.
+The exact-string patch was too fragile for the checked-out build.ps1. This
+version locates the main.c, sio.c and linker command lines by regex, validates
+each match before writing, and applies flags only when NativeSioRole=unified.
+The script backs up build.ps1 and does not change linker memory boundaries.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 from pathlib import Path
 
 MARKER = "CUBHMA_UNIFIED_LTO_SIZE"
-OPT_ANCHOR = '$mainOptimization = if ($NativeSioRole -eq "unified") { "-Oz" } else { "-Os" }'
-MAIN_ANCHOR = '@noInterwork @unifiedOptimizationFlags -mthumb -include $symsHeader -c (Join-Path $root "payload\\main.c") -o (Join-Path $build "main.o")'
-SIO_ANCHOR = '@stackFlags @noInterwork -mthumb -c (Join-Path $root "payload\\sio.c") -o (Join-Path $build "sio.o")'
-LINK_ANCHOR = '& $gcc @common -nostdlib -nostartfiles '
+
+
+def replace_one(source: str, pattern: str, replacement, label: str) -> str:
+    updated, count = re.subn(pattern, replacement, source, count=1, flags=re.M)
+    if count != 1:
+        raise ValueError(f"Expected one {label} line; found {count}. No files changed.")
+    return updated
 
 
 def main() -> int:
@@ -34,39 +39,52 @@ def main() -> int:
         if MARKER in source:
             print("Unified-only LTO size experiment is already applied.")
             return 0
-        if OPT_ANCHOR not in source:
-            raise ValueError("Unified -Oz configuration not found; first pull the unified build-size helpers.")
-        for needle, label in ((MAIN_ANCHOR, "main.c compile command"),
-                              (SIO_ANCHOR, "sio.c compile command"),
-                              (LINK_ANCHOR, "link command")):
-            if source.count(needle) != 1:
-                raise ValueError(f"Expected exactly one {label}; no changes applied.")
+        if not re.search(r'\$mainOptimization\s*=\s*if\s*\(\$NativeSioRole\s*-eq\s*"unified"\)', source):
+            raise ValueError("Unified -Oz configuration not found. Pull the latest branch helpers first.")
 
-        source = source.replace(
-            OPT_ANCHOR,
-            OPT_ANCHOR + '\n$unifiedLtoFlags = @()\nif ($NativeSioRole -eq "unified") { $unifiedLtoFlags += "-flto" }',
-            1,
-        )
-        source = source.replace(
-            MAIN_ANCHOR,
-            MAIN_ANCHOR.replace('@unifiedOptimizationFlags -mthumb', '@unifiedOptimizationFlags @unifiedLtoFlags -mthumb'),
-            1,
-        )
-        source = source.replace(
-            SIO_ANCHOR,
-            SIO_ANCHOR.replace('@noInterwork -mthumb', '@noInterwork @unifiedLtoFlags -mthumb'),
-            1,
-        )
-        source = source.replace(
-            LINK_ANCHOR,
-            LINK_ANCHOR.replace('@common -nostdlib', '@common @unifiedLtoFlags -nostdlib'),
-            1,
-        )
-        source = source.replace(
-            OPT_ANCHOR + '\n$unifiedLtoFlags',
-            OPT_ANCHOR + '\n# ' + MARKER + '\n$unifiedLtoFlags',
-            1,
-        )
+        # Match whole compiler command lines without assuming an exact set of flags.
+        main_pat = r'^(\s*&\s*\$gcc[^\r\n]*payload\\main\.c[^\r\n]*)$'
+        sio_pat = r'^(\s*&\s*\$gcc[^\r\n]*payload\\sio\.c[^\r\n]*)$'
+        link_pat = r'^(\s*&\s*\$gcc[^\r\n]*-nostdlib\s+-nostartfiles[^\r\n]*)$'
+
+        for pat, label in ((main_pat, "main.c compile command"),
+                           (sio_pat, "sio.c compile command"),
+                           (link_pat, "link command")):
+            if len(re.findall(pat, source, flags=re.M)) != 1:
+                raise ValueError(f"Could not uniquely identify the {label}; no files changed.")
+
+        # Add the mode-dependent flag arrays immediately after the existing unified
+        # optimization selector, so legacy roles receive empty arrays.
+        opt_pat = r'^(\s*\$mainOptimization\s*=\s*if\s*\(\$NativeSioRole\s*-eq\s*"unified"\)\s*\{[^\r\n]+\}\s*else\s*\{[^\r\n]+\}\s*)$'
+        opt_repl = r'''\1
+# CUBHMA_UNIFIED_LTO_SIZE: only the unified ROM may discard unused sections.
+$unifiedLtoFlags = @()
+$unifiedGcFlags = @()
+if ($NativeSioRole -eq "unified") {
+    $unifiedLtoFlags += @("-flto", "-ffunction-sections", "-fdata-sections")
+    $unifiedGcFlags += "-Wl,--gc-sections"
+}'''
+        source = replace_one(source, opt_pat, opt_repl, "unified optimization selector")
+
+        def add_compile_flags(match: re.Match) -> str:
+            line = match.group(1)
+            if "@unifiedLtoFlags" in line:
+                raise ValueError("LTO flags already appear in a compile command; inspect build.ps1 manually.")
+            if " -mthumb " not in line:
+                raise ValueError("Could not locate -mthumb on a compile command; no files changed.")
+            return line.replace(" -mthumb ", " @unifiedLtoFlags -mthumb ", 1)
+
+        source = replace_one(source, main_pat, add_compile_flags, "main.c compile command")
+        # The main line's extra arguments do not affect matching the sio.c line.
+        source = replace_one(source, sio_pat, add_compile_flags, "sio.c compile command")
+
+        def add_link_flags(match: re.Match) -> str:
+            line = match.group(1)
+            if "@unifiedGcFlags" in line:
+                raise ValueError("GC flags already appear in the link command; inspect build.ps1 manually.")
+            return line.replace("-nostdlib -nostartfiles", "@unifiedLtoFlags @unifiedGcFlags -nostdlib -nostartfiles", 1)
+
+        source = replace_one(source, link_pat, add_link_flags, "link command")
 
         backup = Path(str(build_path) + ".pre-unified-lto-size.bak")
         if not backup.exists():
@@ -76,10 +94,11 @@ def main() -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print("Enabled -flto for main.c, sio.c, and the final link ONLY for -NativeSioRole unified.")
-    print("Other builds are unchanged; build.ps1 backup created.")
+    print("Applied unified-only -flto plus function/data sections and --gc-sections.")
+    print("Legacy master/slave/adapter roles receive empty extra-flag arrays.")
+    print(f"Backup: {backup}")
     print("Rebuild with tools/prepare_unified_native_link_rom.ps1.")
-    print("If the stack-analysis guard rejects LTO or overlap persists, share the first error lines.")
+    print("This remains an experiment; if the build fails, share the first actual error line.")
     return 0
 
 
