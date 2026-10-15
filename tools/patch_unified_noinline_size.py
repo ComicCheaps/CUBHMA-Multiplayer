@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Try disabling ordinary function inlining for the unified ROM only.
 
-The previous unified-only -Oz build still ended at the same address. This
-reversible experiment appends -fno-inline-functions only to the unified main.c
-compile. All other roles and the existing sizeFlags remain unchanged.
+The unified-only -Oz build still ended at the same address. This reversible
+experiment appends -fno-inline-functions only to the unified main.c compile.
+All other roles and the existing sizeFlags remain unchanged.
 """
 from __future__ import annotations
 
@@ -37,16 +37,17 @@ def main() -> int:
         if source.count(COMPILE_NEEDLE) != 1:
             raise ValueError("Could not uniquely find the main.c compile command; no files changed.")
 
-        new_opt_line = OPT_LINE + r'''$unifiedOptimizationFlags = @()
+        new_opt_line = OPT_LINE + '''$unifiedOptimizationFlags = @()
 if ($NativeSioRole -eq "unified") { $unifiedOptimizationFlags += "-fno-inline-functions" }
 Write-Output ("main optimization: {0}; unified extra flags: {1}" -f $mainOptimization, ($unifiedOptimizationFlags -join " "))
 '''
         source = source.replace(OPT_LINE, new_opt_line, 1)
-        source = source.replace(COMPILE_NEEDLE,
-                                COMPILE_NEEDLE.replace('@noInterwork -mthumb', '@noInterwork @unifiedOptimizationFlags -mthumb'),
-                                1)
-        if source.count(MARKER) == 0:
-            source = source.replace(new_opt_line, new_opt_line + "# " + MARKER + "\n", 1)
+        source = source.replace(
+            COMPILE_NEEDLE,
+            COMPILE_NEEDLE.replace('@noInterwork -mthumb', '@noInterwork @unifiedOptimizationFlags -mthumb'),
+            1,
+        )
+        source = source.replace(new_opt_line, new_opt_line + "# " + MARKER + "\n", 1)
 
         backup = Path(str(build_path) + ".pre-unified-no-inline-size.bak")
         if not backup.exists():
