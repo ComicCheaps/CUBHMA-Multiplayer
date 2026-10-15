@@ -215,12 +215,10 @@ static void RemoteMenuReturnTick(void)
 
 A_ANCHOR = '''    if (gMain_newKeys & A_BUTTON)
     {
-        /* 1 = un remoto sul tile davanti (la scheda si apre solo cosi', e
-         * \`slot\` dice QUALE amico); 2 = la regola generale: il remoto oltre
-         * un bancone, o un object event senza template (FrontObjectClass). */'''
+'''
 A_REPLACEMENT = '''    if ((gMain_newKeys & A_BUTTON) && !sRemoteMenuOpen && !sRemoteMenuReopenState)
     {
-        /* CUBHMA_REMOTE_INTERACTION_MENU: A facing a remote player opens a choice list. */'''
+'''
 
 COMMENT_OLD = '''                /* A non arriva MAI al gioco (il percorso dello script NULL
                  * resta vietato). Ma se la scheda dell'amico e' completa e il
