@@ -14,10 +14,12 @@ from pathlib import Path
 MARKER = "CUBHMA_REMOTE_INTERACTION_MENU"
 FIX_MARKER = "CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS"
 
-EXTRA_FUNCTIONS = '''    # CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS: freeze the local avatar and gate actions on party size.
-    "PlayerFreeze":
+EXTRA_FUNCTIONS = '''    # CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS: freeze field objects and gate actions on party size.
+    "FreezeObjectEvents":
         "void (*)(void)",
-    "PlayerUnfreeze":
+    "UnfreezeObjectEvents":
+        "void (*)(void)",
+    "PlayerFreeze":
         "void (*)(void)",
     "StopPlayerAvatar":
         "void (*)(void)",
@@ -45,6 +47,7 @@ NEW_OPEN = '''static void OpenRemoteInteractionMenu(u32 slot)
 
     sRemoteMenuOpen = 1;
     LockPlayerFieldControls();
+    FreezeObjectEvents();
     PlayerFreeze();
     StopPlayerAvatar();
 
@@ -62,7 +65,7 @@ NEW_CLOSE = '''static void CloseRemoteInteractionMenu(void)
 
     sRemoteMenuOpen = 0;
     RemoteMenuRestoreLabels();
-    PlayerUnfreeze();
+    UnfreezeObjectEvents();
     UnlockPlayerFieldControls();
     gMain_newKeys = 0;
     gMain_heldKeys = 0;
@@ -163,14 +166,42 @@ def backup_and_write(path: Path, new_text: str) -> None:
     path.write_text(new_text, encoding="utf-8", newline="\n")
 
 def ensure_functions(gen: str) -> tuple[str, bool]:
-    anchor = '    "LoadMessageBoxAndBorderGfx":\n'
-    names = ("PlayerFreeze", "PlayerUnfreeze", "StopPlayerAvatar", "CalculatePlayerPartyCount")
-    missing = [name for name in names if f'"{name}":' not in gen]
-    if not missing:
-        return gen, False
-    if anchor not in gen:
-        raise ValueError("Cannot find the patched interaction-menu function table in tools/gen_syms.py.")
-    return gen.replace(anchor, EXTRA_FUNCTIONS + anchor, 1), True
+    changed = False
+
+    # Migrate the old helper's nonexistent PlayerUnfreeze symbol to Emerald's
+    # actual paired object-event functions.
+    old_unfreeze = '''    "PlayerUnfreeze":
+        "void (*)(void)",
+'''
+    new_freeze_pair = '''    "FreezeObjectEvents":
+        "void (*)(void)",
+    "UnfreezeObjectEvents":
+        "void (*)(void)",
+'''
+    if old_unfreeze in gen:
+        gen = gen.replace(old_unfreeze, new_freeze_pair, 1)
+        changed = True
+
+    signatures = (
+        ("FreezeObjectEvents", '"void (*)(void)"'),
+        ("UnfreezeObjectEvents", '"void (*)(void)"'),
+        ("PlayerFreeze", '"void (*)(void)"'),
+        ("StopPlayerAvatar", '"void (*)(void)"'),
+        ("CalculatePlayerPartyCount", '"u8 (*)(void)"'),
+    )
+    missing = [(name, signature) for name, signature in signatures
+               if f'"{name}":' not in gen]
+    if missing:
+        # Locate the function-table entry without relying on escaped newlines.
+        anchor = '    "LoadMessageBoxAndBorderGfx":'
+        pos = gen.find(anchor)
+        if pos < 0:
+            raise ValueError("Cannot find LoadMessageBoxAndBorderGfx in tools/gen_syms.py.")
+        additions = "".join(f'    "{name}":\n        {signature},\n' for name, signature in missing)
+        gen = gen[:pos] + additions + gen[pos:]
+        changed = True
+
+    return gen, changed
 
 def replace_function(source: str, name: str, new_function: str) -> tuple[str, bool]:
     start_token = f"static void {name}("
@@ -212,7 +243,7 @@ def main() -> int:
         new_source = source
         source_changed = False
 
-        # Keep compatibility with an existing menu patch that used ADDR_ for function macros.
+        # Migrate earlier helper versions and repair function macro names.
         for name in (
             "LoadMessageBoxAndBorderGfx", "AddStartMenuWindow", "DrawStdWindowFrame",
             "PrintMenuActionTextsAtPos", "InitMenuNormal", "CopyWindowToVram",
@@ -222,6 +253,18 @@ def main() -> int:
             if new_name in new_source:
                 new_source = new_source.replace(new_name, name)
                 source_changed = True
+
+        # The player object has no PlayerUnfreeze symbol in Emerald. Unfreezing
+        # object events is the matching API; stop/freezing follows the same
+        # sequence used by the vanilla START menu.
+        if "PlayerUnfreeze();" in new_source:
+            new_source = new_source.replace("PlayerUnfreeze();", "UnfreezeObjectEvents();")
+            source_changed = True
+        old_open_freeze = "    LockPlayerFieldControls();\n    PlayerFreeze();\n    StopPlayerAvatar();"
+        new_open_freeze = "    LockPlayerFieldControls();\n    FreezeObjectEvents();\n    PlayerFreeze();\n    StopPlayerAvatar();"
+        if old_open_freeze in new_source:
+            new_source = new_source.replace(old_open_freeze, new_open_freeze, 1)
+            source_changed = True
 
         if FIX_MARKER not in new_source:
             # Add the missing state fields once.
@@ -297,7 +340,8 @@ def main() -> int:
                 "CalculatePlayerPartyCount() == 0",
                 "#define HURRY_THRESHOLD     2u",
                 "keys & B_BUTTON",
-                "PlayerUnfreeze();",
+                "UnfreezeObjectEvents();",
+                "FreezeObjectEvents();",
             )
             if not all(item in new_source for item in required):
                 raise ValueError("Responsiveness patch marker is present but expected fixes are incomplete; inspect payload/main.c.")
