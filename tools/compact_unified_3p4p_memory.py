@@ -174,8 +174,6 @@ def patch_sio(source: str) -> tuple[str, bool]:
     if not counter_match:
         raise ValueError("Could not find native SIO diagnostic counter structure.")
     full_counter_block = counter_match.group(0)
-    struct_start = full_counter_block.index("struct SioCounters")
-    struct_end = full_counter_block.index(";\n\n", full_counter_block.index("struct SioCounters g_sio;")) + 1
     full_decl = full_counter_block[:full_counter_block.index("struct SioCounters g_sio;")]
     compact_block = (
         "#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
