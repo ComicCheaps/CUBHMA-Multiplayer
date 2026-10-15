@@ -49,13 +49,18 @@ The bootstrap is the riskiest new component: the previous experiments relied on 
 
 ### M0 — Clean baseline and measurements
 
-- Checkout this branch in a separate working directory.
-- Verify the pinned submodule is clean and record its commit.
-- Build the unmodified upstream two-player emulator payload on Windows using its documented PowerShell script and checked-in USA symbols.
-- Record payload length, relevant map sections, BSS, stack check, compiler version and exact command.
-- The pre-rebuild experiment remains untouched.
+- [x] Checkout the rebuild branch in a separate working directory.
+- [x] Verify the pinned submodule commit and keep the pre-rebuild experiment untouched.
+- [x] Build the unmodified upstream payload on Windows using the documented PowerShell script and checked-in USA symbols.
+- [x] Save the measured output in [baseline-memory-report.md](baseline-memory-report.md).
+- [ ] Complete the skipped Lua syntax/payload-byte self-check.
+- [ ] Capture section and symbol-level memory usage from the generated linker map.
 
-**Exit:** reproducible clean build and a saved size report. If the unmodified baseline itself doesn't build on the current Windows machine, stop and fix the environment or submodule state before writing new runtime code.
+**Measured baseline:** payload binary 9,680 bytes; code/data/BSS reservation 10,168 bytes; 1,736 bytes remain before `HANDOFF_BASE`; static IRQ-path stack bound 136 of 288 bytes (the build threshold is 144); and only 8 bytes separate `.lateclear` from the private stack.
+
+This is the unmodified upstream payload with `-LinkRole loopback -Syms usa -OutName memory-baseline`, not the new two-player runtime. Its linker emitted an RWX LOAD-segment warning. The build's optional Lua check was skipped because the build script did not locate Python, even though `python --version` works interactively; that check is still open.
+
+**Exit:** repeatable build, saved size report, Lua self-check completed, and map/symbol-level measurement captured. Do not start rewriting runtime code until these measurements are saved.
 
 ### M1 — Compact two-player runtime contract
 

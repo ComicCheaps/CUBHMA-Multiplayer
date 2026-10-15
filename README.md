@@ -36,7 +36,7 @@ This development branch starts a clean, **two-player-first** rebuild of the Emer
 
 The first compatibility target is clean English Pokémon Emerald v1.0 (BPEE). ROM hacks are not assumed compatible until their code layout and required hooks have been validated. No ROM images are included or distributed.
 
-See [the memory-first rebuild plan](docs/memory-first-rebuild.md). The initial memory contract is in [memory-first/include/mf_memory_budget.h](memory-first/include/mf_memory_budget.h).
+See [the memory-first rebuild plan](docs/memory-first-rebuild.md), the [measured upstream baseline report](docs/baseline-memory-report.md), and the initial memory contract in [memory-first/include/mf_memory_budget.h](memory-first/include/mf_memory_budget.h).
 
 **Status:** architecture and budget-contract scaffold only. This branch does not yet contain a verified ROM-resident bootstrap or a working multiplayer patch. The previous experimental branches remain available for reference.
  

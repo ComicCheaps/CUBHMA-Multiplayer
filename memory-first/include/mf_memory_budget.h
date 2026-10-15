@@ -4,8 +4,10 @@
 /*
  * Initial memory contract for the pinned retail-USA Emerald profile.
  *
- * This is a layout constraint, not a claim that a payload has been measured.
- * The linker map and compiler stack reports must verify it for every build.
+ * This is a deliberately stricter target than the measured upstream baseline.
+ * The baseline had 0xD8 bytes of .lateclear and only 8 bytes before the stack;
+ * this target caps .lateclear at 0xC0 and preserves a 0x20-byte gap.
+ * The linker map and compiler stack reports must verify every build.
  */
 #define MF_EWRAM_PAYLOAD_BASE_ADDRESS       0x0203CF80u
 #define MF_EWRAM_HANDOFF_BASE_ADDRESS       0x0203FE00u
