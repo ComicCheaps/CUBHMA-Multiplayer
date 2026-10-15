@@ -109,7 +109,7 @@ struct SioState {
 }'''
     if source.count(role_getter) != 1:
         raise ValueError("Could not uniquely find SioGetNativeRole.")
-    helper_anchor = "#endif\n\n/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */"
+    helper_anchor = "#endif\n\nstatic u16 SioPeekWord(void);"
     source = once(
         source,
         helper_anchor,
@@ -120,7 +120,7 @@ struct SioState {
         "int SioTxIdle(void)\n{\n"
         "    return sSio.txLen == 0;\n"
         "}\n\n"
-        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */",
+        "static u16 SioPeekWord(void);",
         "native SIO helpers outside the runtime-only block",
     )
 
