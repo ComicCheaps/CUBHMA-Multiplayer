@@ -89,6 +89,11 @@ def patch_remote_state(source: str) -> tuple[str, bool]:
                 f"from {old_type}; found {count} declarations."
             )
 
+    # Apply the narrowed fields to the original source before rewriting the
+    # explanatory comment and validating the final struct. Without this splice,
+    # only the temporary `block` changes and Remote.state validation fails.
+    source = source[:match.start()] + block + source[match.end():]
+
     old_comment = (
         " * e ora e' \"il remoto dello slot s\". I campi restano u32/s32 per la lezione\n"
         " * Thumb-1 del 2026-08-23 (i tipi stretti costano istruzioni); i campi di\n"
