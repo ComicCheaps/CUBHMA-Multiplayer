@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Prevent benign native-linker stderr warnings from aborting PowerShell 5.1.
+"""Temporarily relax PowerShell error handling around the native linker.
 
-build.ps1 uses $ErrorActionPreference = Stop. In Windows PowerShell 5.1,
-stderr from a native executable may surface as a NativeCommandError even when
-ld exits successfully. The known RWX LOAD-segment warning triggers this path,
-so build.ps1 exits before objcopy and its explicit $LASTEXITCODE check.
+Windows PowerShell 5.1 turns native-program stderr into NativeCommandError
+records. With build.ps1's global $ErrorActionPreference='Stop', even ld's
+non-fatal RWX LOAD-segment warning aborts the script before objcopy. Redirecting
+stderr alone did not solve this in the user's environment.
 
-This helper redirects only the final linker command's stderr to stdout. A real
-nonzero linker exit is still caught by the immediately following exit-code
-check. It does not change compiler options, code, linker regions, or ROM data.
+This patch wraps only the final linker invocation in try/finally, temporarily
+sets ErrorActionPreference to Continue, captures LASTEXITCODE immediately, then
+restores the original preference and explicitly fails on a nonzero exit code.
+It does not alter linker flags, regions, object files, or ROM contents.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import shutil
 import sys
 from pathlib import Path
 
-MARKER = "CUBHMA_LINKER_STDERR_REDIRECT"
+MARKER = "CUBHMA_LINKER_EAP_GUARD"
 
 
 def main() -> int:
@@ -33,46 +34,62 @@ def main() -> int:
     try:
         source = path.read_text(encoding="utf-8")
         if MARKER in source:
-            print("PowerShell linker-stderr redirect is already applied.")
+            print("PowerShell linker error-handling guard is already applied.")
             return 0
 
-        lines = source.splitlines(keepends=True)
-        matches = [
+        lines = source.splitlines()
+        start_matches = [
             i for i, line in enumerate(lines)
             if "& $gcc" in line and "-nostdlib" in line and "-nostartfiles" in line
         ]
-        if len(matches) != 1:
-            raise ValueError(f"Expected one final linker command start line; found {len(matches)}. No files changed.")
+        if len(start_matches) != 1:
+            raise ValueError(f"Expected one final linker command start line; found {len(start_matches)}. No files changed.")
+        start = start_matches[0]
 
-        index = matches[0]
-        line = lines[index]
-        if "2>&1" in line:
-            raise ValueError("The linker command already has stderr redirection but lacks this helper's marker. Inspect build.ps1 manually.")
+        end_matches = [
+            i for i in range(start + 1, len(lines))
+            if 'throw "link fallito"' in lines[i]
+        ]
+        if len(end_matches) != 1:
+            raise ValueError(f"Expected one immediate link-failure check; found {len(end_matches)}. No files changed.")
+        check = end_matches[0]
+        command_lines = lines[start:check]
+        if not any(relevant.endswith("@objs") or "@objs" in relevant for relevant in command_lines):
+            raise ValueError("The final linker invocation does not end with @objs; no files changed.")
+        if any("try {" in line or MARKER in line for line in command_lines):
+            raise ValueError("The linker command appears partially wrapped; inspect build.ps1 manually.")
 
-        newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-        body = line[:-len(newline)] if newline else line
-        stripped = body.rstrip()
-        trailing_ws = body[len(stripped):]
-        if stripped.endswith("`"):
-            command = stripped[:-1].rstrip()
-            lines[index] = command + " 2>&1 `" + newline
-        else:
-            lines[index] = stripped + " 2>&1" + trailing_ws + newline
+        # Drop the ineffective redirection added by the earlier version.
+        first = command_lines[0]
+        first = first.replace(" 2>&1", "")
+        command_lines[0] = first
 
-        # Store the marker as a comment directly above the command's existing
-        # context without breaking PowerShell's backtick continuation.
-        lines.insert(index, "# " + MARKER + ": preserve harmless ld warnings without terminating PowerShell.\n")
+        indented_command = ["    " + line for line in command_lines]
+        replacement = [
+            "# " + MARKER + ": non-fatal linker warnings must not bypass the exit-code check.",
+            "$previousLinkErrorActionPreference = $ErrorActionPreference",
+            "$ErrorActionPreference = 'Continue'",
+            "$linkExitCode = -1",
+            "try {",
+            *indented_command,
+            "    $linkExitCode = $LASTEXITCODE",
+            "} finally {",
+            "    $ErrorActionPreference = $previousLinkErrorActionPreference",
+            "}",
+            'if ($linkExitCode -ne 0) { throw "link fallito (exit $linkExitCode)" }',
+        ]
 
-        backup = Path(str(path) + ".pre-linker-stderr-redirect.bak")
+        updated_lines = lines[:start] + replacement + lines[check + 1:]
+        backup = Path(str(path) + ".pre-linker-eap-guard.bak")
         if not backup.exists():
             shutil.copy2(path, backup)
-        path.write_text("".join(lines), encoding="utf-8", newline="")
+        path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8", newline="\n")
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print("Applied stderr-to-stdout redirection for the final linker command.")
-    print("Real link failures are still checked via $LASTEXITCODE.")
+    print("Applied scoped PowerShell error-handling guard around the final linker command.")
+    print("Non-fatal stderr warnings can no longer abort the build; a nonzero linker exit still fails explicitly.")
     print(f"Backup: {backup}")
     print("Rebuild with tools/prepare_unified_native_link_rom.ps1.")
     return 0
