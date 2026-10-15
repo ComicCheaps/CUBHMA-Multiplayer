@@ -432,17 +432,24 @@ u8 SioGetNativeRole(void);
         "single-player SIO gate"
     )
 
-    cb_anchor = '''    if (gMain_newKeys & A_BUTTON)
+    cb_anchors = (
+        '''    if ((gMain_newKeys & A_BUTTON) && !sRemoteMenuOpen && !sRemoteMenuReopenState)
     {
-'''
+''',
+        '''    if (gMain_newKeys & A_BUTTON)
+    {
+''',
+    )
+    found_anchors = [anchor for anchor in cb_anchors if anchor in source]
+    if len(found_anchors) != 1:
+        raise ValueError(f"Expected one A-button dispatcher anchor, found {len(found_anchors)}.")
+    cb_anchor = found_anchors[0]
     cb_insert = '''#ifdef PAYLOAD_NATIVE_SIO_RUNTIME
     if (NativeLobbyMenuTick())
         return;
 #endif
 
-    if (gMain_newKeys & A_BUTTON)
-    {
-'''
+''' + cb_anchor
     source = replace_once(source, cb_anchor, cb_insert, "payload_cb1 lobby menu hook")
     return source, True
 
