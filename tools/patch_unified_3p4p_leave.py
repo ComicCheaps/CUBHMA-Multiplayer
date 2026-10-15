@@ -208,8 +208,10 @@ struct SioState {
     irq_fn = r'''void SioOnSerialIrq(void)
 {
     u16 cnt;
+#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)
     u8 localId;
     u8 peer;
+#endif
 
     if (!sSio.active)
         return;
@@ -219,8 +221,8 @@ struct SioState {
     if (cnt & SIOCNT_ERROR)
         g_sio.errFlag++;
 
-    localId = SioGetDeviceId();
 #if defined(PAYLOAD_NATIVE_SIO_RUNTIME)
+    localId = SioGetDeviceId();
     /* Every transfer carries one word from each of the four devices. Keep
      * the receive phase independently aligned for every other device. */
     for (peer = 0; peer < 4u; peer++)
