@@ -89,11 +89,12 @@ def patch_sio(source: str) -> tuple[str, bool]:
         "for (i = 0; i < 3; i++)\n        sSio.rx[i].rxPhase = RX_WAIT_SYNC;",
         "three-parser reset loop",
     )
-    source = once(
-        source,
-        "if (sNativeTransportStarted && SioGetDeviceId() == 0u)\n        REG_SIOCNT |= SIOCNT_START;",
+    clock_old = "if (sNativeTransportStarted && SioGetDeviceId() == 0u)\n        REG_SIOCNT |= SIOCNT_START;"
+    if source.count(clock_old) != 2:
+        raise ValueError("Expected exactly two device-zero clock gates in SioArm and SioOnSerialIrq.")
+    source = source.replace(
+        clock_old,
         "if (SioGetDeviceId() == 0u)\n        REG_SIOCNT |= SIOCNT_START;",
-        "always-clock-capable device zero in SioArm",
     )
     source = once(
         source,
@@ -153,6 +154,55 @@ def patch_sio(source: str) -> tuple[str, bool]:
         "if (localId == 0u)\n        REG_SIOCNT |= SIOCNT_START;",
         "always-clock-capable device zero after each transfer",
     )
+    # Preserve the IRQ heartbeat used by SioTick, but discard its diagnostic-only
+    # counters in the unified build to reclaim EWRAM. The legacy builds retain
+    # every counter exactly as before.
+    counter_match = re.search(r"struct SioCounters\s*\{.*?^\};\s*\n\s*struct SioCounters g_sio;", source, re.S | re.M)
+    if not counter_match:
+        raise ValueError("Could not find native SIO diagnostic counter structure.")
+    full_counter_block = counter_match.group(0)
+    struct_start = full_counter_block.index("struct SioCounters")
+    struct_end = full_counter_block.index(";\n\n", full_counter_block.index("struct SioCounters g_sio;")) + 1
+    full_decl = full_counter_block[:full_counter_block.index("struct SioCounters g_sio;")]
+    compact_block = (
+        "#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
+        "struct SioCounters { u32 irqs; };\n"
+        "#else\n"
+        + full_decl
+        + "#endif\n"
+        "struct SioCounters g_sio;\n"
+        "#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
+        "#define SIO_COUNT_INC(field) ((void)0)\n"
+        "#else\n"
+        "#define SIO_COUNT_INC(field) (g_sio.field++)\n"
+        "#endif"
+    )
+    source = source[:counter_match.start()] + compact_block + source[counter_match.end():]
+
+    # Replace diagnostic-only increment expressions (irqs stays live for SioTick).
+    source, count = re.subn(
+        r"g_sio\.(ieScrubs|framesTx|wordsTx|zeroWords|txFull|wordsRx|frameErr|resync|framesRx|rxFull|errFlag|repairs|drained)\+\+;",
+        lambda m: f"SIO_COUNT_INC({m.group(1)});",
+        source,
+    )
+    if count < 10:
+        raise ValueError(f"Only {count} diagnostic counter increments were converted; expected at least 10.")
+
+    # Counters are not read by anything except the optional serial probe.
+    source = once(
+        source,
+        "u32 SioRepairCount(void)\n{\n    return g_sio.repairs;\n}",
+        "u32 SioRepairCount(void)\n{\n#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n    return 0;\n#else\n    return g_sio.repairs;\n#endif\n}",
+        "repair counter accessor",
+    )
+    source = once(
+        source,
+        "u32 SioScrubCount(void)\n{\n    return g_sio.ieScrubs;\n}",
+        "u32 SioScrubCount(void)\n{\n#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n    return 0;\n#else\n    return g_sio.ieScrubs;\n#endif\n}",
+        "scrub counter accessor",
+    )
+
+
     source = once(
         source,
         "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */\n"
@@ -249,54 +299,6 @@ def patch_main(source: str) -> tuple[str, bool]:
         "        }\n"
         "#endif\n",
         "periodic telemetry conditional",
-    )
-
-    # Preserve the IRQ heartbeat used by SioTick, but discard its diagnostic-only
-    # counters in the unified build to reclaim EWRAM. The legacy builds retain
-    # every counter exactly as before.
-    counter_match = re.search(r"struct SioCounters\s*\{.*?^\};\s*\n\s*struct SioCounters g_sio;", source, re.S | re.M)
-    if not counter_match:
-        raise ValueError("Could not find native SIO diagnostic counter structure.")
-    full_counter_block = counter_match.group(0)
-    struct_start = full_counter_block.index("struct SioCounters")
-    struct_end = full_counter_block.index(";\n\n", full_counter_block.index("struct SioCounters g_sio;")) + 1
-    full_decl = full_counter_block[:full_counter_block.index("struct SioCounters g_sio;")]
-    compact_block = (
-        "#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
-        "struct SioCounters { u32 irqs; };\n"
-        "#else\n"
-        + full_decl
-        + "#endif\n"
-        "struct SioCounters g_sio;\n"
-        "#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n"
-        "#define SIO_COUNT_INC(field) ((void)0)\n"
-        "#else\n"
-        "#define SIO_COUNT_INC(field) (g_sio.field++)\n"
-        "#endif"
-    )
-    source = source[:counter_match.start()] + compact_block + source[counter_match.end():]
-
-    # Replace diagnostic-only increment expressions (irqs stays live for SioTick).
-    source, count = re.subn(
-        r"g_sio\.(ieScrubs|framesTx|wordsTx|zeroWords|txFull|wordsRx|frameErr|resync|framesRx|rxFull|errFlag|repairs|drained)\+\+;",
-        lambda m: f"SIO_COUNT_INC({m.group(1)});",
-        source,
-    )
-    if count < 10:
-        raise ValueError(f"Only {count} diagnostic counter increments were converted; expected at least 10.")
-
-    # Counters are not read by anything except the optional serial probe.
-    source = once(
-        source,
-        "u32 SioRepairCount(void)\n{\n    return g_sio.repairs;\n}",
-        "u32 SioRepairCount(void)\n{\n#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n    return 0;\n#else\n    return g_sio.repairs;\n#endif\n}",
-        "repair counter accessor",
-    )
-    source = once(
-        source,
-        "u32 SioScrubCount(void)\n{\n    return g_sio.ieScrubs;\n}",
-        "u32 SioScrubCount(void)\n{\n#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)\n    return 0;\n#else\n    return g_sio.ieScrubs;\n#endif\n}",
-        "scrub counter accessor",
     )
 
     source = once(
