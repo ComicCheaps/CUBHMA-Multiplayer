@@ -274,7 +274,9 @@ def patch_main(source: str) -> tuple[str, bool]:
         "SIO helper prototypes",
     )
 
-    deliver_fn = r'''int SioDeliverFrame(u8 sourceId, u8 type, const u16 *words, u8 count)
+    deliver_fn = r'''u8 SioGetDeviceId(void);
+
+int SioDeliverFrame(u8 sourceId, u8 type, const u16 *words, u8 count)
 {
     u32 head, next, i;
     u8 localId, remoteSlot;
