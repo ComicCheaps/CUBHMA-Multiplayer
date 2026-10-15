@@ -14,7 +14,8 @@ from pathlib import Path
 RUNTIME_MARKER = "CUBHMA_UNIFIED_RUNTIME_ROLE"
 MENU_MARKER = "CUBHMA_UNIFIED_LOBBY_MENU"
 
-ROLE_DEFS = r'''#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)
+ROLE_DEFS = r'''/* CUBHMA_UNIFIED_RUNTIME_ROLE */
+#if defined(PAYLOAD_NATIVE_SIO_RUNTIME)
 #define CUBHMA_NATIVE_ROLE_OFF  0u
 #define CUBHMA_NATIVE_ROLE_HOST 1u
 #define CUBHMA_NATIVE_ROLE_JOIN 2u
@@ -50,7 +51,11 @@ NEW_ARM = r'''static __attribute__((noinline)) void SioArm(void)
 #endif
 }'''
 
-OLD_RX_BLOCK = r'''#if defined(PAYLOAD_NATIVE_SIO_MASTER)
+OLD_RX_BLOCK = r'''/* CUBHMA_NATIVE_LINK_MODE_PATCH
+     * With a direct two-console cable, master receives the slave in slot 1;
+     * slave receives the master in slot 0. The existing adapter role still
+     * receives slot 0, as its external adapter is the master. */
+#if defined(PAYLOAD_NATIVE_SIO_MASTER)
     SioRxWord(REG_SIOMULTI1);
 #else
     SioRxWord(REG_SIOMULTI0);
@@ -316,7 +321,9 @@ def backup_and_write(path: Path, text: str) -> None:
 
 def transform_sio(source: str) -> tuple[str, bool]:
     if RUNTIME_MARKER in source:
-        return source, False
+        if all(s in source for s in ("SioGetNativeRole", "PAYLOAD_NATIVE_SIO_RUNTIME", "sNativeRole == CUBHMA_NATIVE_ROLE_HOST")):
+            return source, False
+        raise ValueError("SIO has a partial unified-runtime-role patch; inspect it manually.")
 
     role_anchor = "static struct SioState sSio;\n"
     source = replace_once(source, role_anchor, role_anchor + "\n" + ROLE_DEFS,
