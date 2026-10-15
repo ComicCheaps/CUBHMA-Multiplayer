@@ -25,10 +25,7 @@ static void SampleNativeSnapshot(s16 x, s16 y, u8 dir, u8 speed, u32 mapKey)
     u16 words[4];
     u32 i;
     int changed = 0;
-
-    if (++sSioSnapshotSampleFrames < 3u)
-        return;
-    sSioSnapshotSampleFrames = 0;
+    u8 nextBuffer;
 
     words[0] = (u16)x;
     words[1] = (u16)y;
@@ -45,14 +42,23 @@ static void SampleNativeSnapshot(s16 x, s16 y, u8 dir, u8 speed, u32 mapKey)
             if (words[i] != sSioSnapshotLastSampleWords[i])
                 changed = 1;
 
+    /* Check at 60 Hz so short turns are not lost, but cap unchanged-state
+     * sampling at 20 Hz. State changes publish immediately. */
+    if (++sSioSnapshotSampleFrames < 3u && !changed)
+        return;
+    sSioSnapshotSampleFrames = 0;
     if (!changed)
         return;
 
+    /* Double buffering prevents the VBlank IRQ TX pump from reading a partly
+     * updated four-word snapshot while the main loop is publishing it. */
+    nextBuffer = (u8)(sSioSnapshotTxActiveBuffer ^ 1u);
     for (i = 0; i < 4u; i++)
     {
-        sSioSnapshotTxWords[i] = words[i];
+        sSioSnapshotTxWords[nextBuffer][i] = words[i];
         sSioSnapshotLastSampleWords[i] = words[i];
     }
+    sSioSnapshotTxActiveBuffer = nextBuffer;
     sSioSnapshotHaveLastSample = 1;
     sSioSnapshotTxPending = 1;
 }
@@ -146,8 +152,6 @@ static void ConsumeNativeSnapshot(void)
         r->forceResync = 0;
         r->settled = 0;
         r->driftRun = 0;
-        if (gap > DRIFT_TOLERANCE)
-            r->qTail = r->qHead;
         return;
     }
 
@@ -242,7 +246,8 @@ static volatile u32 sSioSnapshotRxVersion;
 static volatile u16 sSioSnapshotRxWords[SIO_SNAPSHOT_WORDS];
 static u32 sSioSnapshotAppliedVersion;
 static u16 sSioSnapshotActiveWords[SIO_SNAPSHOT_WORDS];
-static u16 sSioSnapshotTxWords[SIO_SNAPSHOT_WORDS];
+static u16 sSioSnapshotTxWords[2][SIO_SNAPSHOT_WORDS];
+static volatile u8 sSioSnapshotTxActiveBuffer;
 static u16 sSioSnapshotLastSampleWords[SIO_SNAPSHOT_WORDS];
 static u8 sSioSnapshotHaveActive;
 static u8 sSioSnapshotTxPending;
@@ -287,7 +292,7 @@ static u8 sSioSnapshotHaveLastSample;
      */
     if (sSioSnapshotTxPending && (!eventPending || sSioSnapshotPreferSnapshot))
     {
-        if (SioSendFrame(SIO_T_SNAPSHOT, sSioSnapshotTxWords, SIO_SNAPSHOT_WORDS))
+        if (SioSendFrame(SIO_T_SNAPSHOT, sSioSnapshotTxWords[sSioSnapshotTxActiveBuffer], SIO_SNAPSHOT_WORDS))
         {
             sSioSnapshotTxPending = 0;
             sSioSnapshotPreferSnapshot = 0;
@@ -308,7 +313,7 @@ static u8 sSioSnapshotHaveLastSample;
     }
 
     if (sSioSnapshotTxPending
-        && SioSendFrame(SIO_T_SNAPSHOT, sSioSnapshotTxWords, SIO_SNAPSHOT_WORDS))
+        && SioSendFrame(SIO_T_SNAPSHOT, sSioSnapshotTxWords[sSioSnapshotTxActiveBuffer], SIO_SNAPSHOT_WORDS))
     {
         sSioSnapshotTxPending = 0;
         sSioSnapshotPreferSnapshot = 0;
