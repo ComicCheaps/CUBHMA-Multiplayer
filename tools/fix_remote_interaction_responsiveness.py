@@ -160,10 +160,10 @@ def backup_and_write(path: Path, new_text: str) -> None:
     backup = Path(str(path) + ".pre-menu-responsiveness.bak")
     if not backup.exists():
         shutil.copy2(path, backup)
-    path.write_text(new_text, encoding="utf-8", newline="\\n")
+    path.write_text(new_text, encoding="utf-8", newline="\n")
 
 def ensure_functions(gen: str) -> tuple[str, bool]:
-    anchor = '    "LoadMessageBoxAndBorderGfx":\\n'
+    anchor = '    "LoadMessageBoxAndBorderGfx":\n'
     names = ("PlayerFreeze", "PlayerUnfreeze", "StopPlayerAvatar", "CalculatePlayerPartyCount")
     missing = [name for name in names if f'"{name}":' not in gen]
     if not missing:
@@ -179,11 +179,11 @@ def replace_function(source: str, name: str, new_function: str) -> tuple[str, bo
         if new_function.strip() in source:
             return source, False
         raise ValueError(f"Could not find function {name} in payload/main.c.")
-    next_function = source.find("\\nstatic ", start + len(start_token))
+    next_function = source.find("\nstatic ", start + len(start_token))
     if next_function < 0:
         raise ValueError(f"Could not find the next function boundary after {name}.")
     old = source[start:next_function + 1]
-    replacement = new_function.rstrip() + "\\n\\n"
+    replacement = new_function.rstrip() + "\n\n"
     if old == replacement:
         return source, False
     return source[:start] + replacement + source[next_function + 1:], True
@@ -230,7 +230,7 @@ def main() -> int:
                 raise ValueError("Could not find the remote-menu state block.")
             new_source = new_source.replace(
                 state_anchor,
-                state_anchor + "\\nstatic u32 sRemoteMenuCursor;\\nstatic u32 sRemoteMenuNoticeNoPokemon;\\n",
+                state_anchor + "\nstatic u32 sRemoteMenuCursor;\nstatic u32 sRemoteMenuNoticeNoPokemon;\n",
                 1,
             )
 
@@ -274,7 +274,7 @@ def main() -> int:
             end = new_source.find("static void RemoteMenuReturnTick(void)", start)
             if start < 0 or end < 0:
                 raise ValueError("Could not find the current menu notice/input handlers.")
-            new_source = new_source[:start] + NEW_INPUT_BLOCK + "\\n" + new_source[end:]
+            new_source = new_source[:start] + NEW_INPUT_BLOCK + "\n" + new_source[end:]
 
             # The follower should enter catch-up movement as soon as a small backlog forms.
             old_threshold = "#define HURRY_THRESHOLD     4u"
@@ -286,7 +286,7 @@ def main() -> int:
 
             new_source = new_source.replace(
                 "/* CUBHMA_REMOTE_INTERACTION_MENU: state for the remote-player action list. */",
-                "/* CUBHMA_REMOTE_INTERACTION_MENU: state for the remote-player action list. */\\n/* CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS */",
+                "/* CUBHMA_REMOTE_INTERACTION_MENU: state for the remote-player action list. */\n/* CUBHMA_REMOTE_INTERACTION_RESPONSIVENESS */",
                 1,
             )
             source_changed = True
