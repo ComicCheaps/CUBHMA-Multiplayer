@@ -196,13 +196,6 @@ def patch_sio(source: str) -> tuple[str, bool]:
     )
     source = once(source, tick_anchor, tick_replacement, "SioTick readiness poll")
 
-    source = once(
-        source,
-        "/* " + SIO_MARKER + ": never use the device-ID field before transfer one. */\n",
-        "",
-        "placeholder marker",
-    ) if ("/* " + SIO_MARKER + ": never use the device-ID field before transfer one. */\n") in source else source
-
     if source.count("SioTryStartTransfer();") != 3:
         raise ValueError(
             "Post-patch validation failed: expected SioArm, SioTick and IRQ call sites."
