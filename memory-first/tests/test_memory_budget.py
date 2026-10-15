@@ -1,8 +1,7 @@
-"""Tests for the memory-first compile-time budget contract.
+"""Tests for the memory-first EWRAM layout contract.
 
-These tests need only the Python standard library. They validate the constants,
-not a payload binary; the linker-map and worst-case-stack check is a separate
-mandatory gate before the runtime is embedded or released.
+These tests validate constants only. They do not inspect a compiled payload;
+linker-map and worst-case stack checks remain mandatory before embedding.
 """
 from pathlib import Path
 import re
@@ -22,20 +21,31 @@ def define_value(name: str) -> int:
 
 
 class MemoryBudgetContractTests(unittest.TestCase):
-    def test_address_window_matches_documented_size(self):
+    def test_total_window_and_static_region_match_addresses(self):
         base = define_value("MF_EWRAM_PAYLOAD_BASE_ADDRESS")
-        end = define_value("MF_EWRAM_PAYLOAD_END_ADDRESS")
-        window = define_value("MF_EWRAM_WINDOW_BYTES")
-        self.assertEqual(end - base, window)
-        self.assertEqual(window, 0x3080)
+        handoff = define_value("MF_EWRAM_HANDOFF_BASE_ADDRESS")
+        end = define_value("MF_EWRAM_WINDOW_END_ADDRESS")
+        self.assertEqual(end - base, define_value("MF_EWRAM_WINDOW_BYTES"))
+        self.assertEqual(handoff - base, define_value("MF_EWRAM_STATIC_REGION_BYTES"))
+        self.assertEqual(end - handoff, define_value("MF_EWRAM_HANDOFF_REGION_BYTES"))
+        self.assertEqual(end - base, 0x3080)
+        self.assertEqual(handoff - base, 0x2E80)
 
-    def test_runtime_budget_preserves_guard(self):
-        window = define_value("MF_EWRAM_WINDOW_BYTES")
-        guard = define_value("MF_EWRAM_SAFETY_GUARD_BYTES")
-        runtime_budget = define_value("MF_EWRAM_RUNTIME_BUDGET_BYTES")
-        self.assertGreaterEqual(guard, 0x200)
-        self.assertEqual(window - guard, runtime_budget)
-        self.assertEqual(runtime_budget, 0x2E80)
+    def test_handoff_subregions_fit_and_keep_gap_before_stack(self):
+        handoff = define_value("MF_EWRAM_HANDOFF_REGION_BYTES")
+        lateclear = define_value("MF_EWRAM_LATECLEAR_MAX_BYTES")
+        guard = define_value("MF_EWRAM_HANDOFF_GUARD_BYTES")
+        stack = define_value("MF_EWRAM_PRIVATE_IRQ_STACK_BYTES")
+        self.assertEqual(lateclear + guard + stack, handoff)
+        self.assertEqual(lateclear, 0xC0)
+        self.assertEqual(guard, 0x20)
+        self.assertEqual(stack, 0x120)
+
+    def test_static_irq_stack_limit_is_at_most_half_stack(self):
+        stack = define_value("MF_EWRAM_PRIVATE_IRQ_STACK_BYTES")
+        limit = define_value("MF_EWRAM_IRQ_STACK_USAGE_LIMIT")
+        self.assertLessEqual(limit * 2, stack)
+        self.assertEqual(limit, 0x90)
 
     def test_first_milestone_has_one_remote_peer(self):
         self.assertEqual(define_value("MF_MAX_REMOTE_PLAYERS"), 1)

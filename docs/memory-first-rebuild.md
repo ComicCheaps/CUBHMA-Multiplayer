@@ -24,15 +24,16 @@ This is a compatibility target, not a promise that arbitrary Emerald ROM hacks w
 
 ## Memory contract
 
-The upstream retail-USA payload layout reserves an EWRAM window beginning at `0x0203CF80` and ending at `0x02040000`. That window is `0x3080` bytes (12,416 bytes). The values are recorded in `memory-first/include/mf_memory_budget.h`.
+The pinned upstream retail-USA payload layout reserves the EWRAM window from `0x0203CF80` through (but not including) `0x02040000`: `0x3080` bytes (12,416 bytes). It splits the window into two regions; the top 512 bytes are **not** unused:
 
-- The complete runtime footprint—loaded payload image, initialized data, BSS, and measured worst-case stack use—must be at most `0x2E80` bytes (11,904 bytes).
-- At least `0x200` bytes (512 bytes) remain outside that footprint as a safety guard.
-- The linker/map report, not the binary file size alone, is the authority. We must count every section that occupies the reserved EWRAM region and include the stack bound.
-- A build that exceeds the budget fails. Do not remove the guard, weaken a linker assertion, reduce stack below a measured worst case, or merely silence a warning to make the build pass.
-- Record a fresh size report for every release candidate. The documented address window is an initial target profile and must be re-confirmed against the exact payload and ROM profile before runtime integration.
+- The static payload region ends at `HANDOFF_BASE = 0x0203FE00`. Header, state, mailbox, code, initialized data and BSS must all end by that address. Its maximum size is `0x2E80` bytes (11,904 bytes).
+- The handoff region from `0x0203FE00` to `0x02040000` is `0x200` bytes (512 bytes). Upstream reserves `0x120` bytes (288 bytes) at the top for the private IRQ stack.
+- This plan limits late-cleared data at the beginning of the handoff region to `0xC0` bytes (192 bytes). A further `0x20` bytes (32 bytes) must remain between late-cleared data and the stack.
+- The upstream stack guard requires the statically calculated worst-case IRQ path to use no more than half of the `0x120`-byte stack allocation: `0x90` bytes (144 bytes). Calculate actual usage from compiler stack reports; do not assume it.
 
-The first test checks these constants and the arithmetic contract only. It is not a substitute for a linker-map/stack measurement; that check becomes a release gate before the payload is embedded.
+The linker/map report—not `payload.bin` length alone—is the authority. Report static payload end, BSS, late-cleared region, stack bounds and calculated worst-case stack for every candidate build. A build that violates any individual limit fails. Do not move game-owned memory boundaries or suppress a safety assertion to make a build pass.
+
+The automated tests verify constants and arithmetic only. They do not measure a compiled payload. A linker-map and stack measurement is mandatory before embedding a build, and the layout must be re-confirmed against the exact ROM profile before runtime integration.
 
 ## Architecture boundaries
 
