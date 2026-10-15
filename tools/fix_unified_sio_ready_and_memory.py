@@ -76,7 +76,7 @@ def patch_remote_state(source: str) -> tuple[str, bool]:
     }
 
     for field, (old_type, new_type) in fields.items():
-        pattern = rf"(?m)^(\s*){old_type}\s+{field}\s*;"
+        pattern = rf"(?m)^([ \t]*){old_type}[ \t]+{field}[ \t]*;"
         block, count = re.subn(
             pattern,
             lambda m, t=new_type, f=field: f"{m.group(1)}{t} {f};",
@@ -90,13 +90,14 @@ def patch_remote_state(source: str) -> tuple[str, bool]:
             )
 
     old_comment = (
-        " * I campi restano u32/s32 per la lezione Thumb-1 del 2026-08-23 (i tipi\n"
-        " * stretti costano istruzioni); i campi di g_state con lo stesso nome restano\n"
+        " * e ora e' il remoto dello slot s. I campi restano u32/s32 per la lezione\n"
+        " * Thumb-1 del 2026-08-23 (i tipi stretti costano istruzioni); i campi di\n"
+        " * g_state con lo stesso nome restano vivi come SPECCHIO dello slot primario,\n"
     )
     new_comment = (
-        " * I flag, gli ID, le coordinate sul filo e gli indici degli anelli usano\n"
-        " * u8/u16 dopo averne verificato l'intervallo; spawnMapKey e il puntatore\n"
-        " * callback restano a 32 bit. I campi di g_state con lo stesso nome restano\n"
+        " * e ora e' il remoto dello slot s. Flag, ID e indici usano u8/u16 dopo\n"
+        " * averne verificato l'intervallo; coordinate e mapKey seguono i campi sul filo.\n"
+        " * I campi di g_state con lo stesso nome restano lo SPECCHIO dello slot primario,\n"
     )
     source = once(source, old_comment, new_comment, "Remote-width documentation")
 
