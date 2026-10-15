@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Add symmetric 20 Hz compact movement snapshots to the native-SIO payload.
+"""Add symmetric compact movement snapshots and reconciliation to native SIO.
 
-Samples each local player every three VBlanks (20 Hz at 60 FPS), sends a compact
-four-word snapshot only when state changes, and reconciles the remote avatar
-from the newest snapshot instead of queueing every predicted step. Reliable
-events remain enabled for entry/map transitions, trainer cards, and statuses.
+Samples game movement every frame, sends changed four-word snapshots immediately,
+and repeats unchanged state at 4 Hz for recovery from a lost update. The receiver
+reconciles from the newest snapshot instead of queueing predicted movement steps.
+Reliable events remain enabled for entry/map transitions, trainer cards, and status.
 """
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ MARKER = "CUBHMA_NATIVE_MOVEMENT_SNAPSHOTS"
 SNAPSHOT_TAG = "CUBHMA_NATIVE_SNAPSHOT_RX_TX"
 SAMPLE_FUNCTION = r'''#ifdef PAYLOAD_WITH_SIO
 /* CUBHMA_NATIVE_MOVEMENT_SNAPSHOTS
- * Sample every 3 frames = 20 Hz, but only transmit changed snapshots. This
- * keeps the native cable below its limited word-rate while checking movement
- * at the requested cadence. Each packet is 4 words instead of a 6-word event.
+ * Check movement each frame so even short turns are detected. Changed states
+ * are sent immediately; unchanged state repeats at 4 Hz for loss recovery. A
+ * four-word snapshot costs less link bandwidth than a full movement event.
  */
 static void SampleNativeSnapshot(s16 x, s16 y, u8 dir, u8 speed, u32 mapKey)
 {
@@ -438,7 +438,7 @@ static u8 sSioSnapshotHaveLastSample;
         return 1
 
     print("Native movement snapshot patch applied to payload/main.c.")
-    print("Both master and slave now sample local position at 20 Hz and send compact updates when state changes.")
+    print("Both ROMs check movement every frame, send changes immediately, and repeat the latest state at 4 Hz.")
     print("The receiver reconciles against the latest snapshot instead of accumulating predicted step events.")
     print("Reliable events remain enabled for map entry, status, and trainer-card flows.")
     print("Backup: payload/main.c.pre-native-movement-snapshots.bak")
