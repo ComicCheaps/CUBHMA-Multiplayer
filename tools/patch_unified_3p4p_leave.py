@@ -109,20 +109,21 @@ struct SioState {
 }'''
     if source.count(role_getter) != 1:
         raise ValueError("Could not uniquely find SioGetNativeRole.")
-    helper_anchor = "#endif\n\nstatic u16 SioPeekWord(void);"
-    source = once(
-        source,
-        helper_anchor,
-        "#endif\n\n"
-        "u8 SioGetDeviceId(void)\n{\n"
-        "    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);\n"
-        "}\n\n"
-        "int SioTxIdle(void)\n{\n"
-        "    return sSio.txLen == 0;\n"
-        "}\n\n"
-        "static u16 SioPeekWord(void);",
-        "native SIO helpers outside the runtime-only block",
+    helper_pattern = r"(u8 SioGetNativeRole\\(void\\)\\s*\\{\\s*return sNativeRole;\\s*\\}\\s*#endif\\s*)(static u16 SioPeekWord\\(void\\);)"
+    helper_replacement = r"\\1" + (
+        "\\nu8 SioGetDeviceId(void)\\n{\\n"
+        "    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);\\n"
+        "}\\n\\n"
+        "int SioTxIdle(void)\\n{\\n"
+        "    return sSio.txLen == 0;\\n"
+        "}\\n\\n"
+    ) + r"\\2"
+    source, helper_count = re.subn(
+        helper_pattern, helper_replacement, source, count=1, flags=re.S
     )
+    if helper_count != 1:
+        raise ValueError("Could not insert shared SIO helper functions outside the runtime-only block.")
+
 
     arm_fn = r'''static __attribute__((noinline)) void SioArm(void)
 {
