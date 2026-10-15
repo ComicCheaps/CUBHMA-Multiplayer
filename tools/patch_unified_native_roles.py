@@ -321,7 +321,10 @@ def backup_and_write(path: Path, text: str) -> None:
 
 def transform_sio(source: str) -> tuple[str, bool]:
     if RUNTIME_MARKER in source:
-        if all(s in source for s in ("SioGetNativeRole", "PAYLOAD_NATIVE_SIO_RUNTIME", "sNativeRole == CUBHMA_NATIVE_ROLE_HOST")):
+        runtime_api_present = all(s in source for s in ("SioGetNativeRole", "PAYLOAD_NATIVE_SIO_RUNTIME"))
+        legacy_role_checks_present = "sNativeRole == CUBHMA_NATIVE_ROLE_HOST" in source
+        link_id_patch_present = "CUBHMA_UNIFIED_LINK_ID_MASTER" in source
+        if runtime_api_present and (legacy_role_checks_present or link_id_patch_present):
             return source, False
         raise ValueError("SIO has a partial unified-runtime-role patch; inspect it manually.")
 
