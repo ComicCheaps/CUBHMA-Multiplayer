@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 MARKER = "CUBHMA_NATIVE_SNAPSHOT_RECONCILIATION_FIX"
-HARD_GAP = "#define NATIVE_SNAPSHOT_HARD_RESYNC_GAP 24u"
+HARD_GAP = "#define NATIVE_SNAPSHOT_HARD_RESYNC_GAP 48u"
 
 OLD_PEER_LOOKUP = '''    /* Native cable mode has one remote peer. Wait for its reliable entry event
      * to create the avatar; the most recent snapshot stays available meanwhile.
@@ -86,6 +86,22 @@ NEW_PEER_LOOKUP = '''    /* Native direct-link mode has one peer. Prefer the slo
      * fast movement correction, not a replacement for map/door sequencing. */
     if (r->mapKey != mapKey)
         return;
+
+    /* The slot may be known but still idle while the ordinary field loop is
+     * waiting to spawn its avatar. Refresh its latest target and return before
+     * touching ObjectEvent(r->objectId), which is invalid for an idle slot.
+     * This matters particularly when a reliable EVENT_SYNC is delayed/lost. */
+    if (r->state != STATE_SPAWNED || r->objectId >= OBJECT_EVENTS_COUNT)
+    {
+        r->targetX = x;
+        r->targetY = y;
+        r->gender = gender;
+        r->avatarState = avatarState;
+        r->status = ST_OVERWORLD;
+        r->spawnCooldown = 0;
+        return;
+    }
+
     if (!MapRemoteToLocal(r, mapKey, x, y, &lx, &ly, &via))
         return;
 '''
@@ -179,7 +195,7 @@ def main() -> int:
         return 1
 
     print("Native movement reconciliation fix applied.")
-    print("Changes: same-map correction snaps only beyond 24 tiles; smaller gaps are caught up smoothly.")
+    print("Changes: same-map correction snaps only beyond 48 tiles; smaller gaps are caught up smoothly.")
     print("Snapshots can recover peer discovery if the initial reliable sync packet is missed.")
     print("Avatar creation still runs in the normal game loop, never in the serial interrupt.")
     print("Backup: payload/main.c.pre-snapshot-reconciliation.bak")
