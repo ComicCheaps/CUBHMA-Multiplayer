@@ -368,6 +368,24 @@ static u8 sSioSnapshotHaveLastSample;
 #endif
 '''
         source = replace_once(source, track_old, track_new, "local player movement event block")
+
+        periodic_sync_old = '''    if (++sFramesSinceSync >= SYNC_PERIOD)
+    {
+        sFramesSinceSync = 0;
+        EmitEvent(EVENT_SYNC, dir, (u8)speed, x, y);
+    }
+'''
+        periodic_sync_new = '''#ifndef PAYLOAD_WITH_SIO
+    /* Native SIO uses the compact latest-state snapshot for steady correction.
+     * Keep the one-second periodic event only in legacy event-transport builds. */
+    if (++sFramesSinceSync >= SYNC_PERIOD)
+    {
+        sFramesSinceSync = 0;
+        EmitEvent(EVENT_SYNC, dir, (u8)speed, x, y);
+    }
+#endif
+'''
+        source = replace_once(source, periodic_sync_old, periodic_sync_new, "periodic SYNC replacement")
         source = replace_once(
             source,
             "static void TrackPlayer(u32 playerOe)\n{",
