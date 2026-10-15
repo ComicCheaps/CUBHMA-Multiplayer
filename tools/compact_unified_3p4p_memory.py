@@ -51,17 +51,33 @@ def patch_sio(source: str) -> tuple[str, bool]:
         "compact per-peer receive state",
     )
 
-    source = once(
-        source,
-        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n"
-        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\n"
-        " * otherwise the remaining child windows would lose their clock source. */\n"
-        "static volatile u8 sNativeTransportStarted;\n"
-        "u8 SioGetDeviceId(void);\n",
-        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n"
-        "u8 SioGetDeviceId(void);\n",
-        "remove redundant clock latch",
+    role_anchor_with_proto = (
+        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n"
+        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\\n"
+        " * otherwise the remaining child windows would lose their clock source. */\\n"
+        "static volatile u8 sNativeTransportStarted;\\n"
+        "u8 SioGetDeviceId(void);\\n"
     )
+    role_anchor_without_proto = (
+        "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n"
+        "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\\n"
+        " * otherwise the remaining child windows would lose their clock source. */\\n"
+        "static volatile u8 sNativeTransportStarted;\\n"
+    )
+    if source.count(role_anchor_with_proto) == 1:
+        source = source.replace(
+            role_anchor_with_proto,
+            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n",
+            1,
+        )
+    elif source.count(role_anchor_without_proto) == 1:
+        source = source.replace(
+            role_anchor_without_proto,
+            "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\\n",
+            1,
+        )
+    else:
+        raise ValueError("Could not uniquely find the redundant transport clock latch.")
 
     old_set_role = r'''void SioSetNativeRole(u8 role)
 {
