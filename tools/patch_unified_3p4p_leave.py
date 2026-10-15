@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 MARKER = "CUBHMA_UNIFIED_3P4P_PER_PEER_RX"
+SIO_MARKER = "CUBHMA_UNIFIED_3P4P_PER_PEER_RX_SIO"
 ROOT = Path(__file__).resolve().parent.parent
 SUBMODULE = ROOT / "third_party" / "gen3-poke-multiplayer"
 
@@ -28,7 +29,7 @@ def once(source: str, old: str, new: str, label: str) -> str:
 
 
 def replace_function(source: str, name: str, replacement: str, label: str) -> str:
-    pattern = rf"static [^\n]+\b{name}\(void\)\s*\{{.*?^\}}"
+    pattern = rf"(?:static )?[^\n]+\b{name}\(void\)\s*\{{.*?^\}}"
     updated, n = re.subn(pattern, lambda _: replacement, source, count=1, flags=re.S | re.M)
     if n != 1:
         raise ValueError(f"Could not uniquely replace {label} (matches={n}).")
@@ -36,7 +37,7 @@ def replace_function(source: str, name: str, replacement: str, label: str) -> st
 
 
 def patch_sio(source: str) -> tuple[str, bool]:
-    if MARKER in source:
+    if SIO_MARKER in source:
         return source, False
     if "CUBHMA_UNIFIED_RUNTIME_ROLE" not in source or "CUBHMA_UNIFIED_LINK_ID_MASTER" not in source:
         raise ValueError("Apply the unified runtime-role and Start-menu helper patches first.")
@@ -78,7 +79,8 @@ struct SioState {
         "static volatile u8 sNativeRole = CUBHMA_NATIVE_ROLE_OFF;\n"
         "/* Once a session starts, ID 0 keeps clocking even if that player leaves;\n"
         " * otherwise the remaining child windows would lose their clock source. */\n"
-        "static volatile u8 sNativeTransportStarted;\n",
+        "static volatile u8 sNativeTransportStarted;\n"
+        "u8 SioGetDeviceId(void);\n",
         "runtime transport latch",
     )
     old_role_fn = r'''void SioSetNativeRole(u8 role)
@@ -105,21 +107,21 @@ struct SioState {
 {
     return sNativeRole;
 }'''
+    if source.count(role_getter) != 1:
+        raise ValueError("Could not uniquely find SioGetNativeRole.")
+    helper_anchor = "#endif\\n\\n/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */"
     source = once(
         source,
-        role_getter,
-        role_getter + r'''
-
-u8 SioGetDeviceId(void)
-{
-    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);
-}
-
-int SioTxIdle(void)
-{
-    return sSio.txLen == 0;
-}''',
-        "runtime role getter and native SIO helpers",
+        helper_anchor,
+        "#endif\\n\\n"
+        "u8 SioGetDeviceId(void)\\n{\\n"
+        "    return (u8)((REG_SIOCNT & SIOCNT_ID_MASK) >> 4);\\n"
+        "}\\n\\n"
+        "int SioTxIdle(void)\\n{\\n"
+        "    return sSio.txLen == 0;\\n"
+        "}\\n\\n"
+        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */",
+        "native SIO helpers outside the runtime-only block",
     )
 
     arm_fn = r'''static __attribute__((noinline)) void SioArm(void)
@@ -245,6 +247,13 @@ int SioTxIdle(void)
 
     if "SioRxWord(u8 sourceId, u16 w)" not in source or "SioDeliverFrame(sourceId" not in source:
         raise ValueError("Per-peer SIO parser validation failed.")
+    source = once(
+        source,
+        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */",
+        "/* CUBHMA_UNIFIED_LINK_ID_MASTER: physical SIO master follows hardware device ID, not menu role. */\\n"
+        "/* " + SIO_MARKER + ": maintain an independent RX parser for each peer. */",
+        "per-peer SIO marker",
+    )
     return source, True
 
 
@@ -381,6 +390,8 @@ static void NativeLobbyBeginLeave(void)
     /* Drop stale movement, queue one leave event, and keep the transport active
      * until the final word has left the serial TX buffer. */
     g_mailbox.txTail = g_mailbox.txHead;
+    EmitEvent(EVENT_LEAVE, 0, 0, 0, 0);
+    EmitEvent(EVENT_LEAVE, 0, 0, 0, 0);
     EmitEvent(EVENT_LEAVE, 0, 0, 0, 0);
     sNativeLeavePending = 1;
     sNativeLeaveWait = 0;
