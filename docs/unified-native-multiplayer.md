@@ -54,3 +54,10 @@ Build one byte-identical Emerald ROM for every participant. Multiplayer is optio
 - Four consoles see the correct three remote characters, each with independent movement, status, trainer card, and map-transition state.
 - Missing/unplugged peers do not freeze movement or cause stale characters to remain.
 - Native SIO adapter builds and legacy payload builds still compile, and the payload fits its reserved EWRAM/stack budgets.
+
+## First implementation milestone: unified two-player proof of concept
+
+The branch now includes source-patch and build helpers for one ROM that can select Host or Join at runtime. The test menu is opened with SELECT in the overworld, and single-player leaves native SIO inactive. The dedicated output is `build/unified/Emerald-unified.gba`.
+
+This milestone is deliberately limited to two players. It does not yet implement the lobby-size selector, a full join/ready handshake, or four-player SIO receive demultiplexing. The patch and build scripts have not yet been verified against the user's local ARM toolchain; treat the resulting ROM as a test build and keep the previous working master/slave ROMs untouched.
+
