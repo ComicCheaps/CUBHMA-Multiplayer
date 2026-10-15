@@ -381,6 +381,14 @@ def transform_build(source: str) -> tuple[str, bool]:
     elif '$sioRoleDefs += "-DPAYLOAD_NATIVE_SIO_RUNTIME"' not in source:
         raise ValueError("Cannot find native SIO role compiler-definition block.")
 
+    # Keep the snapshot transport enabled in main.c, as in existing native
+    # master/slave builds, and add a distinct flag for runtime role switching.
+    native_main_define = 'if ($WithSio -and $NativeSioRole -ne "adapter") { $mainDefs += "-DPAYLOAD_NATIVE_SIO" }'
+    if native_main_define not in source:
+        main_defs_anchor = '$mainDefs = @()\nif ($WithSio) { $mainDefs += "-DPAYLOAD_WITH_SIO" }\n'
+        source = replace_once(source, main_defs_anchor, main_defs_anchor + native_main_define + '\n', "native snapshot main.c compile definition")
+        changed = True
+
     main_anchor = 'if ($NativeSioRole -eq "master") {'
     main_runtime = 'if ($NativeSioRole -eq "unified") { $mainDefs += "-DPAYLOAD_NATIVE_SIO_RUNTIME" }\n\n'
     if main_runtime not in source:
